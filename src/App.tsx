@@ -1,29 +1,32 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ErrorBoundary, SkeletonBlock, ToastContainer } from './components/ui/Common';
 import { PublicFooter, PublicHeader, WorkspaceShell } from './components/Layout';
-import {
-  AboutPage,
-  ContactPage,
-  FeaturesPage,
-  HowItWorksPage,
-  LandingPage,
-  LegalPolicyPage,
-  PricingPage,
-} from './pages/PublicPages';
-import { ForgotPasswordPage, LoginPage, RegisterPage } from './pages/AuthPages';
-import { VerificationWorkspace } from './pages/VerificationWorkspace';
-import {
-  CompareOpportunitiesPage,
-  OpportunitiesDirectoryPage,
-  OpportunityDetailPage,
-} from './pages/OpportunitiesPages';
-import { DashboardOverview } from './pages/DashboardOverview';
-import { EligibilityPage } from './pages/EligibilityPage';
-import { ApplicationsPage } from './pages/ApplicationsPage';
-import { AssistantPage } from './pages/AssistantPage';
-import { SettingsPage } from './pages/SettingsPage';
-import { AdminPanel } from './pages/AdminPanel';
+// Route-level lazy loading keeps page-specific code out of the initial bundle.
+const AboutPage = lazy(() => import('./pages/PublicPages').then((module) => ({ default: module.AboutPage })));
+const ContactPage = lazy(() => import('./pages/PublicPages').then((module) => ({ default: module.ContactPage })));
+const FeaturesPage = lazy(() => import('./pages/PublicPages').then((module) => ({ default: module.FeaturesPage })));
+const HowItWorksPage = lazy(() => import('./pages/PublicPages').then((module) => ({ default: module.HowItWorksPage })));
+const LandingPage = lazy(() => import('./pages/PublicPages').then((module) => ({ default: module.LandingPage })));
+const LegalPolicyPage = lazy(() => import('./pages/PublicPages').then((module) => ({ default: module.LegalPolicyPage })));
+const PricingPage = lazy(() => import('./pages/PublicPages').then((module) => ({ default: module.PricingPage })));
+
+const ForgotPasswordPage = lazy(() => import('./pages/AuthPages').then((module) => ({ default: module.ForgotPasswordPage })));
+const LoginPage = lazy(() => import('./pages/AuthPages').then((module) => ({ default: module.LoginPage })));
+const RegisterPage = lazy(() => import('./pages/AuthPages').then((module) => ({ default: module.RegisterPage })));
+
+const VerificationWorkspace = lazy(() => import('./pages/VerificationWorkspace').then((module) => ({ default: module.VerificationWorkspace })));
+
+const CompareOpportunitiesPage = lazy(() => import('./pages/OpportunitiesPages').then((module) => ({ default: module.CompareOpportunitiesPage })));
+const OpportunitiesDirectoryPage = lazy(() => import('./pages/OpportunitiesPages').then((module) => ({ default: module.OpportunitiesDirectoryPage })));
+const OpportunityDetailPage = lazy(() => import('./pages/OpportunitiesPages').then((module) => ({ default: module.OpportunityDetailPage })));
+
+const DashboardOverview = lazy(() => import('./pages/DashboardOverview').then((module) => ({ default: module.DashboardOverview })));
+const EligibilityPage = lazy(() => import('./pages/EligibilityPage').then((module) => ({ default: module.EligibilityPage })));
+const ApplicationsPage = lazy(() => import('./pages/ApplicationsPage').then((module) => ({ default: module.ApplicationsPage })));
+const AssistantPage = lazy(() => import('./pages/AssistantPage').then((module) => ({ default: module.AssistantPage })));
+const SettingsPage = lazy(() => import('./pages/SettingsPage').then((module) => ({ default: module.SettingsPage })));
+const AdminPanel = lazy(() => import('./pages/AdminPanel').then((module) => ({ default: module.AdminPanel })));
 
 function AppRouter() {
   const { user, loading } = useAuth();
@@ -317,7 +320,16 @@ export default function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
-        <AppRouter />
+        <Suspense
+          fallback={
+            <div className="mx-auto max-w-5xl space-y-4 p-8">
+              <SkeletonBlock className="h-14" />
+              <SkeletonBlock className="h-72" />
+            </div>
+          }
+        >
+          <AppRouter />
+        </Suspense>
         <ToastContainer />
       </AuthProvider>
     </ErrorBoundary>
