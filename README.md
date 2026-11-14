@@ -1,5 +1,9 @@
 # ProofPath AI 2.0 — Student Opportunity Intelligence, Verification & Protection Platform
 
+**Live demo:** [Open ProofPath AI on Render](https://proofpath-ai-demo.onrender.com)
+
+> **Demo limitations:** Hosted on a free service without a persistent disk, so SQLite data may reset after a restart or redeployment. Gemini-powered verification and chat require a configured `GEMINI_API_KEY`.
+
 ProofPath AI 2.0 is a full-stack TypeScript web application built to help students discover scholarships, fellowships, internships, grants, and competitions while verifying claims against primary sources, computing deterministic eligibility intelligence, and managing applications end-to-end.
 
 ## Architecture Overview
