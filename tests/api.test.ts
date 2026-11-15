@@ -3,11 +3,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type http from 'node:http';
-import { initDatabase } from '../server/db.ts';
+import { initDatabase, mapOpportunityRow } from '../server/db.ts';
 import { createApp } from '../server/app.ts';
 import { assertSafePublicUrl } from '../server/ssrf.ts';
 import { validateMagicBytes } from '../server/security.ts';
-import { evaluateEligibility } from '../server/eligibility.ts';
+import { buildTrustProfile, evaluateEligibility } from '../server/eligibility.ts';
+import { buildEvidenceRecords } from '../server/ai.ts';
 import type Database from 'better-sqlite3';
 
 let server: http.Server;
@@ -152,6 +153,139 @@ describe('ProofPath AI Enterprise API & Security Suite', () => {
       .get('Chevening Application') as { custom_title: string } | undefined;
     expect(savedApp?.custom_title).toBe('Chevening Application');
     dbCheck.close();
+  });
+
+  it('maps only retrieved evidence URLs to the specific claims that cite them', () => {
+    const claims = [
+      {
+        claim: 'The program requires an application fee.',
+        verdict: 'CONTRADICTED' as const,
+        explanation: 'The official source states that applications are free.',
+        evidenceExcerpt: 'Applications are free of charge.',
+        sourceUrl: 'https://example.org/fees/',
+      },
+      {
+        claim: 'A separate claim cites an invented URL.',
+        verdict: 'VERIFIED' as const,
+        explanation: 'This source was not returned by retrieval.',
+        evidenceExcerpt: 'Unmatched excerpt.',
+        sourceUrl: 'https://not-retrieved.example/fake',
+      },
+      {
+        claim: 'The deadline is published on the program page.',
+        verdict: 'SUPPORTED' as const,
+        explanation: 'A retrieved page contains the deadline.',
+        evidenceExcerpt: 'Applications close on 30 June.',
+        sourceUrl: 'https://example.org/deadline',
+      },
+    ];
+
+    const records = buildEvidenceRecords(
+      claims,
+      [
+        { url: 'https://example.org/fees', title: 'Fee policy' },
+        { url: 'https://example.org/deadline', title: 'Program deadline' },
+      ],
+      '2026-11-15T12:00:00.000Z'
+    );
+
+    expect(records).toHaveLength(2);
+    expect(records.map((record) => record.claimIndex)).toEqual([0, 2]);
+    expect(records.map((record) => record.stance)).toEqual(['contradicts', 'supports']);
+    expect(records[0].sourceTitle).toBe('Fee policy');
+    expect(records[1].excerpt).toContain('30 June');
+  });
+
+  it('keeps signed-in verification reports out of the public report feed', async () => {
+    const privateReportId = 'rep_private_feed_regression';
+    const now = new Date().toISOString();
+    db.prepare(`
+      INSERT INTO verification_reports (
+        id, user_id, opportunity_id, input_type, submitted_url, submitted_title, submitted_text,
+        file_name, file_mime, overall_status, summary, extracted_info_json, claims_json,
+        risk_indicators_json, confidence_limitations, recommended_actions_json, is_saved, created_at
+      ) VALUES (?, 'usr_student_demo', NULL, 'url', NULL, 'Private regression report', NULL,
+        NULL, NULL, 'VERIFIED', 'Private summary', '{}', '[]', '[]', '', '[]', 1, ?)
+    `).run(privateReportId, now);
+
+    const publicFeed = await fetch(`${baseUrl}/api/verifications?scope=public`).then((response) => response.json());
+    expect(publicFeed.items.some((item: { id: string }) => item.id === privateReportId)).toBe(false);
+    expect(publicFeed.items.some((item: { id: string }) => item.id === 'rep_seed_chevening')).toBe(true);
+
+    const login = await fetch(`${baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'student@proofpath.ai', password: 'Student@2026!' }),
+    });
+    expect(login.status).toBe(200);
+    const mine = await fetch(`${baseUrl}/api/verifications?scope=mine`, {
+      headers: { Cookie: extractCookie(login) },
+    }).then((response) => response.json());
+    expect(mine.items.some((item: { id: string }) => item.id === privateReportId)).toBe(true);
+  });
+
+  it('describes domain suffixes as signals rather than proof of institutional status', () => {
+    const row = db.prepare('SELECT * FROM opportunities WHERE id = ?').get('opp_chevening') as Record<string, unknown>;
+    const opportunity = mapOpportunityRow(row);
+    const trust = buildTrustProfile(
+      { ...opportunity, officialUrl: 'https://sample-foundation.org/program' },
+      { reportCount: 0, evidenceCount: 0, flagCount: 0 }
+    );
+
+    expect(trust.domainClassification).toContain('nonprofit status is not established');
+    expect(trust.domainClassification).not.toContain('Official Foundation');
+    expect(trust.riskSummary).toContain('not evidence of safety');
+  });
+
+  it('allows an authenticated user to change their password and revokes other sessions', async () => {
+    const email = `password_change_${Date.now()}@example.edu`;
+    const registration = await fetch(`${baseUrl}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fullName: 'Password Test', email, password: 'OriginalPass123!' }),
+    });
+    expect(registration.status).toBe(201);
+    const registrationData = await registration.json();
+    const cookie = extractCookie(registration);
+    const userId = registrationData.user.id as string;
+
+    const secondLogin = await fetch(`${baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: 'OriginalPass123!' }),
+    });
+    expect(secondLogin.status).toBe(200);
+    const secondCookie = extractCookie(secondLogin);
+
+    const wrongPassword = await fetch(`${baseUrl}/api/auth/change-password`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: cookie,
+        'X-CSRF-Token': registrationData.csrfToken,
+      },
+      body: JSON.stringify({ currentPassword: 'WrongPassword!', newPassword: 'NewSecurePass456!' }),
+    });
+    expect(wrongPassword.status).toBe(400);
+
+    const changed = await fetch(`${baseUrl}/api/auth/change-password`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: cookie,
+        'X-CSRF-Token': registrationData.csrfToken,
+      },
+      body: JSON.stringify({ currentPassword: 'OriginalPass123!', newPassword: 'NewSecurePass456!' }),
+    });
+    expect(changed.status).toBe(200);
+    expect((await changed.json()).revokedOtherSessions).toBeGreaterThanOrEqual(1);
+
+    const currentSession = await fetch(`${baseUrl}/api/auth/me`, { headers: { Cookie: cookie } });
+    const revokedSession = await fetch(`${baseUrl}/api/auth/me`, { headers: { Cookie: secondCookie } });
+    expect(currentSession.status).toBe(200);
+    expect(revokedSession.status).toBe(200);
+    expect((await currentSession.json()).user.id).toBe(userId);
+    expect((await revokedSession.json()).user).toBeNull();
   });
 
   it('supports opportunity search, filtering, and side-by-side comparison', async () => {

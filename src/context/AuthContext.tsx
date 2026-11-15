@@ -2,6 +2,8 @@ import React, { createContext, useCallback, useContext, useEffect, useState } fr
 import { apiRequest, setCsrfToken } from '../lib/api';
 import type { SafeUser, StudentProfile } from '../types';
 
+export type ThemePreference = 'light' | 'dark' | 'system';
+
 export interface ToastMessage {
   id: string;
   type: 'success' | 'error' | 'info';
@@ -15,6 +17,8 @@ interface AuthContextValue {
   unreadNotifications: number;
   loading: boolean;
   theme: 'light' | 'dark';
+  themePreference: ThemePreference;
+  setThemePreference: (preference: ThemePreference) => void;
   toggleTheme: () => void;
   refreshSession: () => Promise<void>;
   setProfileState: (p: StudentProfile | null) => void;
@@ -33,24 +37,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [loading, setLoading] = useState(true);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+  const [themePreference, setThemePreference] = useState<ThemePreference>(() => {
     const saved = localStorage.getItem('proofpath_theme');
-    return saved === 'dark' ? 'dark' : 'light';
+    return saved === 'light' || saved === 'dark' || saved === 'system' ? saved : 'system';
   });
+  const [systemTheme, setSystemTheme] = useState<'light' | 'dark'>(() =>
+    window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  );
+  const theme = themePreference === 'system' ? systemTheme : themePreference;
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleChange = (event: MediaQueryListEvent) => {
+      setSystemTheme(event.matches ? 'dark' : 'light');
+    };
+    setSystemTheme(mediaQuery.matches ? 'dark' : 'light');
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
 
   useEffect(() => {
     const root = document.documentElement;
-    if (theme === 'dark') {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
-    }
-    localStorage.setItem('proofpath_theme', theme);
-  }, [theme]);
+    root.classList.toggle('dark', theme === 'dark');
+    localStorage.setItem('proofpath_theme', themePreference);
+  }, [theme, themePreference]);
 
   const toggleTheme = useCallback(() => {
-    setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
-  }, []);
+    setThemePreference(theme === 'light' ? 'dark' : 'light');
+  }, [theme]);
 
   const addToast = useCallback((t: Omit<ToastMessage, 'id'>) => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -110,6 +124,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         unreadNotifications,
         loading,
         theme,
+        themePreference,
+        setThemePreference,
         toggleTheme,
         refreshSession,
         setProfileState: setProfile,

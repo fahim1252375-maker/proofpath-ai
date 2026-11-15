@@ -98,6 +98,76 @@ export interface VerifyInput {
   fileBuffer?: Buffer;
   fileName?: string;
   fileMime?: string;
+  opportunityId?: string | null;
+}
+
+interface RetrievedEvidenceSource {
+  url: string;
+  title: string;
+}
+
+interface EvidenceRecordInsert {
+  id: string;
+  claimIndex: number;
+  sourceUrl: string;
+  sourceTitle: string;
+  excerpt: string;
+  stance: 'supports' | 'contradicts' | 'neutral';
+  retrievedAt: string;
+}
+
+function normalizeEvidenceUrl(value: string): string | null {
+  try {
+    const url = new URL(value);
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return null;
+    url.hash = '';
+    let pathname = url.pathname;
+    while (pathname.length > 1 && pathname.endsWith('/')) pathname = pathname.slice(0, -1);
+    return `${url.protocol}//${url.host.toLowerCase()}${pathname}${url.search}`;
+  } catch {
+    return null;
+  }
+}
+
+function findGroundedSource(
+  value: string,
+  sources: RetrievedEvidenceSource[]
+): RetrievedEvidenceSource | undefined {
+  const candidate = normalizeEvidenceUrl(value);
+  if (!candidate) return undefined;
+  return sources.find((source) => normalizeEvidenceUrl(source.url) === candidate);
+}
+
+/**
+ * Create evidence relationships only when a claim explicitly cites a URL
+ * returned by the grounding pass. Unmatched sources remain unassigned.
+ */
+export function buildEvidenceRecords(
+  claims: ClaimVerificationItem[],
+  sources: RetrievedEvidenceSource[],
+  retrievedAt: string
+): EvidenceRecordInsert[] {
+  return claims.flatMap((claim, claimIndex) => {
+    const source = findGroundedSource(claim.sourceUrl, sources);
+    if (!source) return [];
+
+    const stance =
+      claim.verdict === 'CONTRADICTED'
+        ? 'contradicts'
+        : claim.verdict === 'VERIFIED' || claim.verdict === 'SUPPORTED'
+        ? 'supports'
+        : 'neutral';
+
+    return [{
+      id: `ev_${crypto.randomUUID()}`,
+      claimIndex,
+      sourceUrl: source.url,
+      sourceTitle: source.title,
+      excerpt: claim.evidenceExcerpt,
+      stance,
+      retrievedAt,
+    }];
+  });
 }
 
 export async function runVerificationEngine(
@@ -188,7 +258,7 @@ export async function runVerificationEngine(
     const groundedAnalysisText = groundingRes.text || '';
     const chunks =
       groundingRes.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-    const retrievedSources = chunks
+    const retrievedSources: RetrievedEvidenceSource[] = chunks
       .filter((c) => c.web?.uri)
       .map((c) => ({
         url: String(c.web?.uri || ''),
@@ -196,9 +266,26 @@ export async function runVerificationEngine(
       }))
       .slice(0, 12);
 
+    // Include the submitted page only when the server successfully fetched it.
+    if (input.fetchedPage?.reachable && input.fetchedPage.finalUrl) {
+      const directSource = {
+        url: input.fetchedPage.finalUrl,
+        title: input.fetchedPage.pageTitle || 'Submitted page',
+      };
+      if (
+        normalizeEvidenceUrl(directSource.url) &&
+        !retrievedSources.some(
+          (source) => normalizeEvidenceUrl(source.url) === normalizeEvidenceUrl(directSource.url)
+        )
+      ) {
+        retrievedSources.unshift(directSource);
+      }
+    }
+
     // Step 2: Structured JSON report generation strictly anchored to grounded findings & retrieved URLs
     const structuredPrompt = `Convert the following verification research into a strict JSON verification report.
-ONLY cite URLs from the provided Retrieved Evidence Sources or the user's submitted URL if it was verified directly. Do NOT invent any URLs.
+ONLY cite URLs from the provided Retrieved Evidence Sources. Do NOT invent URLs.
+If no retrieved source directly supports a claim, set that claim's sourceUrl to an empty string. Never reuse an un-fetched reference URL as evidence.
 
 Original Submission Summary:
 - Input Type: ${input.inputType}
@@ -305,13 +392,17 @@ Verdict Categories (choose exact enum):
     const now = new Date().toISOString();
 
     const claims: ClaimVerificationItem[] = Array.isArray(parsed.claims)
-      ? parsed.claims.map((c: Record<string, unknown>) => ({
-          claim: String(c.claim || ''),
-          verdict: normalizeVerdict(String(c.verdict || '')),
-          explanation: String(c.explanation || ''),
-          evidenceExcerpt: String(c.evidenceExcerpt || ''),
-          sourceUrl: String(c.sourceUrl || input.submittedUrl || ''),
-        }))
+      ? parsed.claims.map((c: Record<string, unknown>) => {
+          const groundedSource = findGroundedSource(String(c.sourceUrl || ''), retrievedSources);
+          return {
+            claim: String(c.claim || ''),
+            verdict: normalizeVerdict(String(c.verdict || '')),
+            explanation: String(c.explanation || ''),
+            evidenceExcerpt: String(c.evidenceExcerpt || ''),
+            // Do not render arbitrary model-provided URLs as evidence links.
+            sourceUrl: groundedSource?.url || '',
+          };
+        })
       : [];
 
     const riskIndicators = Array.isArray(parsed.riskIndicators)
@@ -345,51 +436,8 @@ Verdict Categories (choose exact enum):
 
     const summary = String(parsed.summary || 'Verification completed.');
 
-    // Persist report + evidence inside a transaction
-    interface EvidenceRecordInsert {
-      id: string;
-      claimIndex: number;
-      sourceUrl: string;
-      sourceTitle: string;
-      excerpt: string;
-      stance: 'supports' | 'contradicts' | 'neutral';
-      retrievedAt: string;
-    }
-
-    const evidenceRecords: EvidenceRecordInsert[] =
-      retrievedSources.length > 0
-        ? retrievedSources.map((s, idx) => ({
-            id: `ev_${crypto.randomUUID()}`,
-            claimIndex: idx < claims.length ? idx : 0,
-            sourceUrl: s.url,
-            sourceTitle: s.title,
-            excerpt:
-              claims[idx]?.evidenceExcerpt ||
-              `Grounding reference retrieved during live check for ${extractedInfo.title}.`,
-            stance:
-              overallStatus === 'CONTRADICTED'
-                ? 'contradicts'
-                : overallStatus === 'VERIFIED' || overallStatus === 'SUPPORTED'
-                ? 'supports'
-                : 'neutral',
-            retrievedAt: now,
-          }))
-        : claims
-            .filter((c: ClaimVerificationItem) => c.sourceUrl && c.sourceUrl.startsWith('http'))
-            .map((c: ClaimVerificationItem, idx: number) => ({
-              id: `ev_${crypto.randomUUID()}`,
-              claimIndex: idx,
-              sourceUrl: c.sourceUrl,
-              sourceTitle: 'Cited Verification Source',
-              excerpt: c.evidenceExcerpt,
-              stance:
-                c.verdict === 'CONTRADICTED'
-                  ? 'contradicts'
-                  : c.verdict === 'VERIFIED' || c.verdict === 'SUPPORTED'
-                  ? 'supports'
-                  : 'neutral',
-              retrievedAt: now,
-            }));
+    // Persist only explicit claim-to-grounded-source relationships.
+    const evidenceRecords = buildEvidenceRecords(claims, retrievedSources, now);
 
     db.transaction(() => {
       db.prepare(`
@@ -397,10 +445,11 @@ Verdict Categories (choose exact enum):
           id, user_id, opportunity_id, input_type, submitted_url, submitted_title, submitted_text,
           file_name, file_mime, overall_status, summary, extracted_info_json, claims_json,
           risk_indicators_json, confidence_limitations, recommended_actions_json, is_saved, created_at
-        ) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         reportId,
         userId,
+        input.opportunityId || null,
         input.inputType,
         input.submittedUrl || null,
         extractedInfo.title,
@@ -448,7 +497,7 @@ Verdict Categories (choose exact enum):
     return {
       id: reportId,
       userId,
-      opportunityId: null,
+      opportunityId: input.opportunityId || null,
       inputType: input.inputType,
       submittedUrl: input.submittedUrl || null,
       submittedTitle: extractedInfo.title,
