@@ -153,7 +153,7 @@ export interface VerificationReportDTO {
     excerpt: string;
     stance: 'supports' | 'contradicts' | 'neutral';
     retrievedAt: string;
-    credibility: {
+    credibility?: {
       score: number;
       level: 'strong' | 'moderate' | 'limited';
       host: string;
