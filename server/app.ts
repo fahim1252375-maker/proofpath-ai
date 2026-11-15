@@ -58,7 +58,10 @@ const ALLOWED_UPLOAD_MIMES = new Set([
 
 function hydrateReportRow(db: Database.Database, row: Record<string, unknown>): VerificationReportDTO {
   const extractedInfo = JSON.parse(String(row.extracted_info_json || '{}'));
-  const officialUrl = String(extractedInfo?.officialUrl || row.submitted_url || '');
+  const linkedOpportunity = row.opportunity_id
+    ? db.prepare('SELECT official_url FROM opportunities WHERE id = ?').get(String(row.opportunity_id)) as { official_url: string } | undefined
+    : undefined;
+  const officialUrl = linkedOpportunity?.official_url || '';
   const evidenceRows = db
     .prepare(
       'SELECT claim_index, source_url, source_title, excerpt, stance, retrieved_at FROM evidence_records WHERE report_id = ? ORDER BY claim_index ASC'
