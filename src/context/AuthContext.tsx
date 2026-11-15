@@ -41,7 +41,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const saved = localStorage.getItem('proofpath_theme');
     return saved === 'light' || saved === 'dark' || saved === 'system' ? saved : 'system';
   });
-  const [systemTheme, setSystemTheme] = useState<'light' | 'dark>(() =>
+  const [systemTheme, setSystemTheme] = useState<'light' | 'dark'>(() =>
     window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
   );
   const theme = themePreference === 'system' ? systemTheme : themePreference;
