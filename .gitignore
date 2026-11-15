@@ -28,3 +28,12 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+
+# Local runtime data and SQLite databases (never commit user/application state)
+data/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal

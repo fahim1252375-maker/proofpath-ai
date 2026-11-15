@@ -51,6 +51,9 @@ export function VerificationWorkspace({
   const [selectedClaimIndex, setSelectedClaimIndex] = useState<number>(0);
   const [compareLeftId, setCompareLeftId] = useState<string>('');
   const [compareRightId, setCompareRightId] = useState<string>('');
+  const [serverCompare, setServerCompare] = useState<{ sharedClaims: Array<{ claim: string; occurrences: number; verdictConflict: boolean; verdicts: Array<{ reportId: string; verdict: string }> }> } | null>(null);
+  const [serverCompareLoading, setServerCompareLoading] = useState(false);
+  const [serverCompareError, setServerCompareError] = useState('');
 
   const [flagOpen, setFlagOpen] = useState(false);
   const [flagReason, setFlagReason] = useState<'scam_fee' | 'phishing' | 'expired' | 'misleading_terms' | 'other'>('scam_fee');
@@ -183,6 +186,39 @@ export function VerificationWorkspace({
 
   const compareLeft = history.find((h) => h.id === compareLeftId) || history[0] || null;
   const compareRight = history.find((h) => h.id === compareRightId) || history[1] || null;
+
+  useEffect(() => {
+    if (subView !== 'compare' || !user || !compareLeft || !compareRight) {
+      setServerCompare(null);
+      setServerCompareError('');
+      return;
+    }
+    if (compareLeft.id === compareRight.id) {
+      setServerCompare(null);
+      setServerCompareError('Choose two different reports to compare their claim histories.');
+      return;
+    }
+    let active = true;
+    setServerCompareLoading(true);
+    setServerCompareError('');
+    apiRequest<{ sharedClaims: Array<{ claim: string; occurrences: number; verdictConflict: boolean; verdicts: Array<{ reportId: string; verdict: string }> }> }>('/api/verifications/compare', {
+      method: 'POST',
+      body: JSON.stringify({ reportIds: [compareLeft.id, compareRight.id] }),
+    })
+      .then((result) => {
+        if (active) setServerCompare(result);
+      })
+      .catch((err) => {
+        if (active) setServerCompareError(err instanceof Error ? err.message : 'Unable to compare report evidence.');
+      })
+      .finally(() => {
+        if (active) setServerCompareLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [subView, user?.id, compareLeft?.id, compareRight?.id]);
+
 
   const activeClaim = activeReport?.claims[selectedClaimIndex] || activeReport?.claims[0] || null;
   const linkedSources = activeReport
@@ -582,6 +618,12 @@ export function VerificationWorkspace({
                                     <ExternalLink className="h-3 w-3 shrink-0" />
                                   </a>
                                   <p className="font-mono text-[10px] text-[#8C9A88]">stance: {src.stance}</p>
+                                  <p className="mt-1 font-mono text-[10px] text-[#C5F36A]">
+                                    URL signal: {src.credibility.level} · {src.credibility.score}/100
+                                  </p>
+                                  <p className="mt-0.5 text-[10px] text-[#8C9A88]">
+                                    Host: {src.credibility.host}. This is not proof of legitimacy or accreditation.
+                                  </p>
                                 </li>
                               ))}
                             </ul>
@@ -672,6 +714,35 @@ export function VerificationWorkspace({
                 </div>
               ) : subView === 'compare' && compareLeft && compareRight ? (
                 <div className="space-y-4">
+                  <div className="rounded-lg border border-[#E4E8E0] bg-[#F7F7F0] p-4 dark:border-[#232D27] dark:bg-[#0C110E]">
+                    <p className="text-xs font-bold text-[#101713] dark:text-[#F7F7F0]">Cross-report claim analysis</p>
+                    {serverCompareLoading ? (
+                      <p className="mt-2 text-xs text-[#5E6B5B] dark:text-[#8C9A88]">Comparing claim records…</p>
+                    ) : serverCompareError ? (
+                      <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">{serverCompareError}</p>
+                    ) : serverCompare?.sharedClaims.length ? (
+                      <div className="mt-2 space-y-2">
+                        {serverCompare.sharedClaims.map((claim, index) => (
+                          <div key={index} className="rounded-md border border-[#E4E8E0] bg-white p-3 dark:border-[#232D27] dark:bg-[#141B17]">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <p className="text-xs font-semibold">{claim.claim}</p>
+                              <span className={`rounded px-2 py-1 text-[10px] font-semibold ${claim.verdictConflict ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300'}`}>
+                                {claim.verdictConflict ? 'Verdict differs' : 'Verdicts align'}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-[11px] text-[#5E6B5B] dark:text-[#8C9A88]">
+                              {claim.verdicts.map((item) => item.verdict).join(' · ')}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-xs text-[#5E6B5B] dark:text-[#8C9A88]">
+                        No matching claim text appears in both reports. The comparison below still shows their extracted fields.
+                      </p>
+                    )}
+                    <p className="mt-2 text-[10px] text-[#8C9A88]">Claim wording is normalized for comparison. Different page versions and retrieval dates can explain differing outcomes; review the underlying sources.</p>
+                  </div>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
                       <label className="block text-[11px] font-semibold text-[#5E6B5B]">Audit Report A</label>

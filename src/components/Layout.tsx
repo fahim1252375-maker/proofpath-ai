@@ -16,6 +16,7 @@ import {
   Moon,
   Search,
   Shield,
+  ShieldCheck,
   SlidersHorizontal,
   Sun,
   UserCheck,
@@ -306,6 +307,7 @@ export function WorkspaceShell({
     { label: 'Eligibility Matrix', path: '/dashboard/eligibility', icon: <UserCheck className="h-4 w-4 shrink-0" /> },
     { label: 'Applications', path: '/dashboard/applications', icon: <Kanban className="h-4 w-4 shrink-0" /> },
     { label: 'AI Advisor', path: '/dashboard/assistant', icon: <Bot className="h-4 w-4 shrink-0" /> },
+    { label: 'Trust Center', path: '/dashboard/trust', icon: <ShieldCheck className="h-4 w-4 shrink-0" /> },
   ];
 
   const isPrivileged = user?.role === 'admin' || user?.role === 'moderator';

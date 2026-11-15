@@ -25,6 +25,7 @@ const DashboardOverview = lazy(() => import('./pages/DashboardOverview').then((m
 const EligibilityPage = lazy(() => import('./pages/EligibilityPage').then((module) => ({ default: module.EligibilityPage })));
 const ApplicationsPage = lazy(() => import('./pages/ApplicationsPage').then((module) => ({ default: module.ApplicationsPage })));
 const AssistantPage = lazy(() => import('./pages/AssistantPage').then((module) => ({ default: module.AssistantPage })));
+const TrustCenterPage = lazy(() => import('./pages/TrustCenterPage').then((module) => ({ default: module.TrustCenterPage })) );
 const SettingsPage = lazy(() => import('./pages/SettingsPage').then((module) => ({ default: module.SettingsPage })));
 const AdminPanel = lazy(() => import('./pages/AdminPanel').then((module) => ({ default: module.AdminPanel })));
 
@@ -145,6 +146,9 @@ function AppRouter() {
     } else if (pathname === '/dashboard/settings') {
       breadcrumb = ['Workspace', 'Preferences'];
       content = <SettingsPage />;
+    } else if (pathname === '/dashboard/trust') {
+      breadcrumb = ['Workspace', 'Trust Center'];
+      content = <TrustCenterPage navigate={navigate} />;
     } else if (pathname === '/admin') {
       breadcrumb = ['Administration', 'Console'];
       content = <AdminPanel />;
