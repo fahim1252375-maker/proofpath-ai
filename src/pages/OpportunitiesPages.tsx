@@ -724,24 +724,27 @@ export function OpportunityDetailPage({
                   <span>Opportunity Trust Profile</span>
                 </h2>
                 <div className="flex justify-between gap-2">
-                  <span className="text-[#5E6B5B] dark:text-[#8C9A88]">Official Domain</span>
+                  <span className="text-[#5E6B5B] dark:text-[#8C9A88]">Listed Domain</span>
                   <span className="inline-flex items-center gap-1 font-mono font-semibold text-[#101713] dark:text-[#F7F7F0]">
                     <Globe className="h-3 w-3" />
                     {tp.officialDomain}
                   </span>
                 </div>
                 <div className="flex justify-between gap-2">
-                  <span className="text-[#5E6B5B] dark:text-[#8C9A88]">Domain Type</span>
+                  <span className="text-[#5E6B5B] dark:text-[#8C9A88]">Domain Signal</span>
                   <span className="text-right font-medium text-[#101713] dark:text-[#F7F7F0]">
                     {tp.domainClassification}
                   </span>
                 </div>
                 <div className="flex justify-between gap-2">
-                  <span className="text-[#5E6B5B] dark:text-[#8C9A88]">Audits / Sources / Flags</span>
+                  <span className="text-[#5E6B5B] dark:text-[#8C9A88]">Audits / Evidence Links / Reports</span>
                   <span className="font-mono font-semibold text-[#101713] tabular-nums dark:text-[#F7F7F0]">
                     {tp.verificationHistoryCount} / {tp.evidenceSourcesCount} / {tp.communityFlagCount}
                   </span>
                 </div>
+                <p className="text-[10px] leading-relaxed text-[#788473] dark:text-[#8C9A88]">
+                  Domain suffixes are technical signals only; they do not independently prove ownership, accreditation, or endorsement.
+                </p>
                 <p className="border-t border-[#E4E8E0] pt-2 text-[11px] leading-relaxed text-[#5E6B5B] dark:border-[#232D27] dark:text-[#8C9A88]">
                   {tp.riskSummary}
                 </p>
@@ -755,7 +758,7 @@ export function OpportunityDetailPage({
                 rel="noopener noreferrer"
                 className="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[#101713] text-xs font-semibold text-[#C5F36A] hover:bg-[#1D2520] dark:bg-[#C5F36A] dark:text-[#101713]"
               >
-                <span>Open Official Portal</span>
+                <span>Open Listed Portal</span>
                 <ExternalLink className="h-3.5 w-3.5" />
               </a>
 

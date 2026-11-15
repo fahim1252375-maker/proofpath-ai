@@ -609,6 +609,67 @@ export function createApp(db: Database.Database) {
     res.json({ user: mapUserRow(updated) });
   });
 
+  app.post('/api/auth/change-password', requireAuth, authLimiter, (req: AuthedRequest, res) => {
+    const schema = z.object({
+      currentPassword: z.string().min(1).max(128),
+      newPassword: z.string().min(8).max(128),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Enter your current password and a new password of at least 8 characters.' });
+      return;
+    }
+    if (parsed.data.currentPassword === parsed.data.newPassword) {
+      res.status(400).json({ error: 'Your new password must be different from your current password.' });
+      return;
+    }
+    if (!req.sessionId) {
+      res.status(401).json({ error: 'Your session could not be validated. Please sign in again.' });
+      return;
+    }
+
+    const userRow = db
+      .prepare('SELECT password_hash FROM users WHERE id = ?')
+      .get(req.authUser!.id) as { password_hash: string } | undefined;
+    if (!userRow || !verifyPassword(parsed.data.currentPassword, userRow.password_hash)) {
+      res.status(400).json({ error: 'Current password is incorrect.' });
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const revokedOtherSessions = db.transaction(() => {
+      db.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?').run(
+        hashPassword(parsed.data.newPassword),
+        now,
+        req.authUser!.id
+      );
+      const revoked = db
+        .prepare('DELETE FROM sessions WHERE user_id = ? AND id <> ?')
+        .run(req.authUser!.id, req.sessionId!).changes;
+      writeAuditLog(db, {
+        actorUserId: req.authUser!.id,
+        action: 'PASSWORD_CHANGED',
+        targetType: 'user',
+        targetId: req.authUser!.id,
+        ipAddress: req.ip,
+        metadata: { revokedOtherSessions: revoked },
+      });
+      createNotification(db, {
+        userId: req.authUser!.id,
+        type: 'security',
+        title: 'Password changed',
+        message: 'Your password was updated. Other active sessions were signed out.',
+        link: '/dashboard/settings',
+      });
+      return revoked;
+    })();
+
+    res.json({
+      message: 'Password updated. Other active sessions have been signed out.',
+      revokedOtherSessions,
+    });
+  });
+
   // ==================== STUDENT PROFILE & ELIGIBILITY ====================
   app.get('/api/profile', requireAuth, (req: AuthedRequest, res) => {
     res.json({ profile: getStudentProfile(req.authUser!.id) });
@@ -941,8 +1002,18 @@ export function createApp(db: Database.Database) {
 
     try {
       const fetchedPage = await fetchPublicUrlSnippet(safeUrl);
+      const linkedOpportunity = db
+        .prepare(
+          `SELECT id FROM opportunities
+           WHERE is_published = 1
+             AND lower(rtrim(official_url, '/')) = lower(rtrim(?, '/'))
+           LIMIT 1`
+        )
+        .get(safeUrl.toString()) as { id: string } | undefined;
+
       const report = await runVerificationEngine(db, req.authUser?.id || null, {
         inputType: 'url',
+        opportunityId: linkedOpportunity?.id || null,
         submittedUrl: safeUrl.toString(),
         submittedTitle: parsed.data.title ? sanitizeText(parsed.data.title, 200) : fetchedPage.pageTitle || undefined,
         fetchedPage,
@@ -1081,7 +1152,8 @@ export function createApp(db: Database.Database) {
       const rows = db
         .prepare(
           `SELECT * FROM verification_reports
-           WHERE overall_status IN ('VERIFIED', 'SUPPORTED', 'CONTRADICTED', 'EXPIRED')
+           WHERE (user_id IS NULL OR id = 'rep_seed_chevening')
+             AND overall_status IN ('VERIFIED', 'SUPPORTED', 'CONTRADICTED', 'EXPIRED')
            ORDER BY created_at DESC LIMIT 12`
         )
         .all() as Array<Record<string, unknown>>;

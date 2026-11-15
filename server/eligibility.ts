@@ -382,40 +382,40 @@ export function buildTrustProfile(
 ): OpportunityTrustProfile {
   let officialDomain = 'unknown-domain';
   try {
-    officialDomain = new URL(opportunity.officialUrl).hostname.replace(/^www\./, '');
+    officialDomain = new URL(opportunity.officialUrl).hostname.replace(/^www\./, '').toLowerCase();
   } catch {
-    officialDomain = opportunity.officialUrl;
+    officialDomain = 'invalid-or-unlisted-domain';
   }
 
-  const dLower = officialDomain.toLowerCase();
-  let domainClassification = 'Institutional Program Domain';
+  let domainClassification = 'Custom domain; ownership has not been independently confirmed';
   if (
-    dLower.endsWith('.gov') ||
-    dLower.endsWith('.go.jp') ||
-    dLower.endsWith('.admin.ch') ||
-    dLower.endsWith('.europa.eu') ||
-    dLower.includes('.gov.')
+    officialDomain.endsWith('.gov') ||
+    officialDomain.endsWith('.go.jp') ||
+    officialDomain.endsWith('.admin.ch') ||
+    officialDomain.endsWith('.europa.eu') ||
+    officialDomain.includes('.gov.')
   ) {
-    domainClassification = 'Government / Intergovernmental Authority';
+    domainClassification = 'Government-domain suffix signal; program ownership is not confirmed';
   } else if (
-    dLower.endsWith('.edu') ||
-    dLower.endsWith('.ac.uk') ||
-    dLower.endsWith('.cern') ||
-    dLower.includes('university')
+    officialDomain.endsWith('.edu') ||
+    officialDomain.endsWith('.ac.uk')
   ) {
-    domainClassification = 'Accredited Academic / Research Institution';
-  } else if (dLower.endsWith('.org') || dLower.includes('daad.de') || dLower.includes('fulbright')) {
-    domainClassification = 'Official Foundation / Exchange Body';
+    domainClassification = 'Academic-domain suffix signal; accreditation is not independently checked';
+  } else if (officialDomain.endsWith('.org')) {
+    domainClassification = 'Organization-style .org domain; nonprofit status is not established';
   }
 
   let riskSummary =
-    'Primary domain inspected with zero unresolved high-risk community escalations.';
-  if (stats.flagCount > 0) {
-    riskSummary = `${stats.flagCount} community report(s) submitted; review moderation status and verify domain (${officialDomain}) before applying.`;
-  } else if (opportunity.verificationStatus === 'CONTRADICTED') {
-    riskSummary = 'Active contradictions found in verification audit. Do not share sensitive documents or pay fees.';
-  } else if (opportunity.verificationStatus === 'UNVERIFIED' || opportunity.verificationStatus === 'INSUFFICIENT_EVIDENCE') {
-    riskSummary = 'Limited corroborating evidence indexed. Run a live AI URL verification audit before proceeding.';
+    'No community reports are currently recorded. Absence of reports is not evidence of safety; independently confirm the organization and opportunity details.';
+  if (opportunity.verificationStatus === 'CONTRADICTED') {
+    riskSummary = 'A linked verification report contains contradictions. Do not pay fees or submit sensitive documents until the issues are resolved.';
+  } else if (
+    opportunity.verificationStatus === 'UNVERIFIED' ||
+    opportunity.verificationStatus === 'INSUFFICIENT_EVIDENCE'
+  ) {
+    riskSummary = 'Available verification evidence is limited or insufficient. Confirm the opportunity directly with the organization before applying.';
+  } else if (stats.flagCount > 0) {
+    riskSummary = `${stats.flagCount} community report(s) have been submitted. This count does not indicate whether reports were upheld or dismissed; review moderation outcomes before applying.`;
   }
 
   return {
