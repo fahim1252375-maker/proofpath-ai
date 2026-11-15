@@ -111,17 +111,32 @@ export async function fetchPublicUrlSnippet(safeUrl: URL): Promise<{
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 7000);
   try {
-    const response = await fetch(safeUrl.toString(), {
-      method: 'GET',
-      redirect: 'follow',
-      signal: controller.signal,
-      headers: {
-        'User-Agent': 'ProofPathAI-Verifier/1.0 (+https://proofpath.ai)',
-        Accept: 'text/html,application/xhtml+xml,text/plain',
-      },
-    });
+    let currentUrl = await assertSafePublicUrl(safeUrl.toString());
+    let response: Response | null = null;
+    const redirectStatuses = new Set([301, 302, 303, 307, 308]);
 
-    const finalParsed = await assertSafePublicUrl(response.url || safeUrl.toString());
+    for (let redirects = 0; redirects <= 5; redirects += 1) {
+      response = await fetch(currentUrl.toString(), {
+        method: 'GET',
+        redirect: 'manual',
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'ProofPathAI-Verifier/1.0 (+https://proofpath.ai)',
+          Accept: 'text/html,application/xhtml+xml,text/plain,application/json',
+        },
+      });
+
+      if (!redirectStatuses.has(response.status)) break;
+      const location = response.headers.get('location');
+      if (!location) break;
+      if (redirects === 5) throw new Error('The page exceeded the redirect limit.');
+      await response.body?.cancel();
+      const redirectTarget = new URL(location, currentUrl);
+      currentUrl = await assertSafePublicUrl(redirectTarget.toString());
+    }
+
+    if (!response) throw new Error('No response was received.');
+    const finalParsed = await assertSafePublicUrl(currentUrl.toString());
     const contentType = response.headers.get('content-type') || '';
     if (!contentType.includes('text') && !contentType.includes('html') && !contentType.includes('json')) {
       return {
@@ -129,7 +144,7 @@ export async function fetchPublicUrlSnippet(safeUrl: URL): Promise<{
         statusCode: response.status,
         finalUrl: finalParsed.toString(),
         pageTitle: '',
-        textExcerpt: `Non-HTML resource (${contentType})`,
+        textExcerpt: 'Non-HTML resource (' + contentType + ')',
       };
     }
 

@@ -1,0 +1,41 @@
+name: Opportunity monitoring
+
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: proofpath-opportunity-monitor
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    name: Check opportunity pages and deadlines
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Validate monitoring secret
+        env:
+          MONITORING_CRON_SECRET: ${{ secrets.MONITORING_CRON_SECRET }}
+        shell: bash
+        run: |
+          if [ -z "$MONITORING_CRON_SECRET" ] || [ "${#MONITORING_CRON_SECRET}" -lt 32 ]; then
+            echo "Configure the MONITORING_CRON_SECRET repository secret (at least 32 characters)."
+            exit 1
+          fi
+
+      - name: Run scheduled monitoring
+        env:
+          MONITORING_CRON_SECRET: ${{ secrets.MONITORING_CRON_SECRET }}
+          MONITOR_URL: https://proofpath-ai-demo.onrender.com
+        shell: bash
+        run: |
+          curl --silent --show-error --fail-with-body \
+            --max-time 210 \
+            --request POST "$MONITOR_URL/api/internal/monitoring/run" \
+            --header "Authorization: Bearer $MONITORING_CRON_SECRET" \
+            --header "Accept: application/json"

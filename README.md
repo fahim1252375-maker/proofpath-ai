@@ -9,7 +9,7 @@
 
 </div>
 
-# ProofPath AI 2.0 — Student Opportunity Intelligence, Verification & Protection Platform
+# ProofPath AI 3.0 — Student Opportunity Intelligence, Verification & Trust Operations Platform
 
 **Live demo:** [Open ProofPath AI on Render](https://proofpath-ai-demo.onrender.com)
 
@@ -33,7 +33,7 @@ ProofPath AI 2.0 is a full-stack TypeScript web application built to help studen
 
 ## Database Setup & Models
 
-SQLite persists to `DB_PATH` (defaults to `./data/proofpath.db`). Migrations run automatically on startup across 20 normalized tables:
+SQLite persists to `DB_PATH` (defaults to `./data/proofpath.db`). Migrations run automatically on startup across the core account, application, verification, and trust-monitoring tables:
 - `users`, `sessions`, `password_resets`, `student_profiles`
 - `opportunities`, `verification_reports`, `evidence_records`, `saved_opportunities`
 - `applications`, `application_documents`, `notifications`, `notification_preferences`
@@ -74,3 +74,34 @@ npm start        # Serves production API + static dist/ via tsx server.ts
 - **SSRF Protection**: Rejects `localhost`, loopback, link-local, cloud metadata (`169.254.169.254`), and private IPv4/IPv6 CIDR ranges before fetching external URLs.
 - **Upload Validation**: 10 MB limit, MIME allowlist (`PDF`, `PNG`, `JPEG`, `WEBP`), and binary magic-byte header verification.
 - **Role-Based Access Control**: Server-side `requireRole('admin', 'moderator')` enforcement on all administrative and moderation endpoints with persistent `admin_audit_logs`.
+
+
+## ProofPath AI 3.0 — Trust Intelligence
+
+The 3.0 trust layer adds the following capabilities:
+
+- **Evidence source signals:** Each retrieved evidence URL receives a deterministic URL-level score based on HTTPS and alignment with the opportunity's listed host. The score is not a domain reputation check and never proves ownership, accreditation, or legitimacy.
+- **Opportunity change history:** A scheduled checker stores a text snapshot of public opportunity pages and records content-hash changes. A changed page is a review signal; the system does not infer that a deadline or funding term changed without a human checking the page.
+- **Saved opportunity watchlists:** Students can configure in-app deadline reminders and page-change notifications for opportunities they have saved.
+- **Community safety patterns:** Administrators and moderators can review report volume, distinct reporters, reason diversity, and moderation state by host. These metrics prioritize review and do not establish fraud.
+- **Explainable eligibility:** The API returns criterion-level rules, missing profile fields, completeness, and next steps. Missing information is not scored as a pass.
+- **Trust & Safety analytics:** A role-protected operational view summarizes published listings, monitored changes, reports, saved listings, and evidence links.
+- **Verification comparison:** Authenticated users can compare 2–4 reports they are authorized to view, including repeated claim text and conflicting verdicts.
+- **Bilingual advisor:** The assistant has stricter English/Bengali consistency, evidence attribution, uncertainty, and untrusted-page-text rules.
+
+### Scheduled monitoring setup
+
+The workflow in `.github/workflows/opportunity-monitor.yml` is a GitHub Actions scheduler that runs every six hours and can also be started manually. It calls the authenticated internal endpoint on the Render service.
+
+1. Generate a random secret with at least 32 characters.
+2. Add it in GitHub: **Repository → Settings → Secrets and variables → Actions → New repository secret**, named `MONITORING_CRON_SECRET`.
+3. Add the same value in Render: **proofpath-ai-demo → Environment**, also named `MONITORING_CRON_SECRET`.
+4. Deploy the branch after review and merge, then use **Actions → Opportunity monitoring → Run workflow** to test it.
+
+The endpoint rejects requests when the secret is missing or invalid. The workflow does not print the secret to its logs.
+
+### Deployment and persistence limitations
+
+The connected Render service is currently on the Free plan and uses the application's SQLite file under `./data`. A free service without a persistent disk can lose local database contents during restarts or redeployments. The monitoring code and scheduler do not remove that platform limitation. For dependable long-term watchlists and change history, configure persistent storage or migrate the application's primary database before treating scheduled history as durable.
+
+In-app notifications are supported. Outbound email and push delivery are not enabled in this release; no email address is contacted by the monitor. GitHub Actions requires the repository secret above, and the Render service requires the matching environment variable. No paid Render resources are provisioned by this change.

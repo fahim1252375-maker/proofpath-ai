@@ -328,6 +328,72 @@ function runMigrations(db: Database.Database): void {
     });
     migrate1();
   }
+
+  if (!applied.has(2)) {
+    const migrate2 = db.transaction(() => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS watchlist_preferences (
+          user_id TEXT NOT NULL,
+          opportunity_id TEXT NOT NULL,
+          notify_deadlines INTEGER NOT NULL DEFAULT 1,
+          notify_changes INTEGER NOT NULL DEFAULT 1,
+          deadline_days_before INTEGER NOT NULL DEFAULT 14 CHECK (deadline_days_before BETWEEN 1 AND 60),
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (user_id, opportunity_id),
+          FOREIGN KEY (user_id, opportunity_id)
+            REFERENCES saved_opportunities(user_id, opportunity_id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS opportunity_snapshots (
+          opportunity_id TEXT PRIMARY KEY REFERENCES opportunities(id) ON DELETE CASCADE,
+          content_hash TEXT,
+          page_title TEXT NOT NULL DEFAULT '',
+          text_excerpt TEXT NOT NULL DEFAULT '',
+          final_url TEXT NOT NULL,
+          last_http_status INTEGER,
+          last_checked_at TEXT NOT NULL,
+          last_error TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS opportunity_change_events (
+          id TEXT PRIMARY KEY,
+          opportunity_id TEXT NOT NULL REFERENCES opportunities(id) ON DELETE CASCADE,
+          change_type TEXT NOT NULL,
+          content_hash_before TEXT NOT NULL,
+          content_hash_after TEXT NOT NULL,
+          title_before TEXT NOT NULL DEFAULT '',
+          title_after TEXT NOT NULL DEFAULT '',
+          excerpt_before TEXT NOT NULL DEFAULT '',
+          excerpt_after TEXT NOT NULL DEFAULT '',
+          detected_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS monitoring_runs (
+          id TEXT PRIMARY KEY,
+          status TEXT NOT NULL CHECK (status IN ('running', 'completed', 'failed')),
+          started_at TEXT NOT NULL,
+          finished_at TEXT,
+          checked_count INTEGER NOT NULL DEFAULT 0,
+          changed_count INTEGER NOT NULL DEFAULT 0,
+          error_count INTEGER NOT NULL DEFAULT 0,
+          summary_json TEXT NOT NULL DEFAULT '{}'
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_watchlist_preferences_user ON watchlist_preferences(user_id);
+        CREATE INDEX IF NOT EXISTS idx_change_events_opportunity ON opportunity_change_events(opportunity_id, detected_at);
+        CREATE INDEX IF NOT EXISTS idx_change_events_detected ON opportunity_change_events(detected_at);
+        CREATE INDEX IF NOT EXISTS idx_monitoring_runs_started ON monitoring_runs(started_at);
+      `);
+
+      db.prepare('INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)').run(
+        2,
+        'trust_intelligence_watchlist_monitoring',
+        new Date().toISOString()
+      );
+    });
+    migrate2();
+  }
 }
 
 function seedInitialData(db: Database.Database): void {

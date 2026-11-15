@@ -28,6 +28,8 @@ import {
   evaluateEligibility,
 } from './eligibility.ts';
 import { AiServiceError, runAssistantChat, runVerificationEngine } from './ai.ts';
+import { registerIntelligenceRoutes } from './intelligence.ts';
+import { scoreSourceCredibility } from './source-credibility.ts';
 import type { SafeUser, StudentProfile, UserRecord, UserRole, VerificationReportDTO } from './types.ts';
 
 const SESSION_COOKIE_NAME = 'proofpath_session';
@@ -55,6 +57,8 @@ const ALLOWED_UPLOAD_MIMES = new Set([
 ]);
 
 function hydrateReportRow(db: Database.Database, row: Record<string, unknown>): VerificationReportDTO {
+  const extractedInfo = JSON.parse(String(row.extracted_info_json || '{}'));
+  const officialUrl = String(extractedInfo?.officialUrl || row.submitted_url || '');
   const evidenceRows = db
     .prepare(
       'SELECT claim_index, source_url, source_title, excerpt, stance, retrieved_at FROM evidence_records WHERE report_id = ? ORDER BY claim_index ASC'
@@ -71,7 +75,7 @@ function hydrateReportRow(db: Database.Database, row: Record<string, unknown>): 
     fileName: row.file_name ? String(row.file_name) : null,
     overallStatus: row.overall_status as VerificationReportDTO['overallStatus'],
     summary: String(row.summary),
-    extractedInfo: JSON.parse(String(row.extracted_info_json || '{}')),
+    extractedInfo,
     claims: JSON.parse(String(row.claims_json || '[]')),
     evidenceSources: evidenceRows.map((e) => ({
       claimIndex: Number(e.claim_index || 0),
@@ -80,6 +84,7 @@ function hydrateReportRow(db: Database.Database, row: Record<string, unknown>): 
       excerpt: String(e.excerpt),
       stance: e.stance as 'supports' | 'contradicts' | 'neutral',
       retrievedAt: String(e.retrieved_at),
+      credibility: scoreSourceCredibility(String(e.source_url), officialUrl),
     })),
     riskIndicators: JSON.parse(String(row.risk_indicators_json || '[]')),
     confidenceLimitations: String(row.confidence_limitations || ''),
@@ -2428,6 +2433,8 @@ export function createApp(db: Database.Database) {
     });
     res.json({ ok: true });
   });
+
+  registerIntelligenceRoutes(app, db, requireAuth, requireRole);
 
   // Centralized error handler
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {

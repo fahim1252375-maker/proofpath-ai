@@ -137,6 +137,13 @@ export interface VerificationReport {
     excerpt: string;
     stance: 'supports' | 'contradicts' | 'neutral';
     retrievedAt: string;
+    credibility: {
+      score: number;
+      level: 'strong' | 'moderate' | 'limited';
+      host: string;
+      signals: string[];
+      caveat: string;
+    };
   }>;
   riskIndicators: Array<{
     severity: 'low' | 'medium' | 'high';
