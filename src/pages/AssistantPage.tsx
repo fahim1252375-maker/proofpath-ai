@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Bot, ExternalLink, Loader2, Plus, Send, Trash2 } from 'lucide-react';
+import { Bot, CalendarDays, ClipboardCheck, ExternalLink, FileText, Loader2, MessagesSquare, Plus, Send, Trash2 } from 'lucide-react';
+import { getAdvisorWorkflows, type AdvisorWorkflow } from '../lib/advisorWorkflows';
 import { apiRequest } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import type { AssistantMessage, ConversationItem } from '../types';
@@ -117,6 +118,14 @@ export function AssistantPage({
           'Compare Chevening and Erasmus Mundus eligibility requirements for me.',
           'What documents should I prepare 3 months before deadlines?',
         ];
+
+  const advisorWorkflows = getAdvisorWorkflows(language);
+  const workflowIcons = {
+    roadmap: CalendarDays,
+    eligibility: ClipboardCheck,
+    statement: FileText,
+    interview: MessagesSquare,
+  } as const;
 
   return (
     <div className="space-y-4">
@@ -240,18 +249,65 @@ export function AssistantPage({
                       : 'Ask about opportunity authenticity, eligibility gaps, or application preparation in English or বাংলা.'
                   }
                 />
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {suggestedQuestions.map((q) => (
-                    <button
-                      key={q}
-                      type="button"
-                      onClick={() => handleSend(q)}
-                      className="rounded-lg border border-[#E4E8E0] bg-[#F7F7F0] p-3 text-left text-xs font-semibold text-[#101713] transition-colors hover:border-[#101713] dark:border-[#232D27] dark:bg-[#0C110E] dark:text-[#F7F7F0] dark:hover:border-[#C5F36A]"
-                    >
-                      {q}
-                    </button>
-                  ))}
-                </div>
+                <section aria-labelledby="advisor-studio-heading" className="space-y-3">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[#71806E] dark:text-[#C5F36A]">
+                        Guided AI workflows
+                      </p>
+                      <h3 id="advisor-studio-heading" className="font-display text-base font-bold text-[#101713] dark:text-[#F7F7F0]">
+                        {language === 'bn' ? 'Strategy Studio' : 'Strategy Studio'}
+                      </h3>
+                    </div>
+                    <p className="text-[11px] text-[#71806E] dark:text-[#8C9A88]">
+                      {language === 'bn' ? 'আপনার বর্তমান প্রোফাইল ও উপলব্ধ রেকর্ড ব্যবহার করে' : 'Uses your profile and available records'}
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {advisorWorkflows.map((workflow) => {
+                      const Icon = workflowIcons[workflow.id];
+                      return (
+                        <button
+                          key={workflow.id}
+                          type="button"
+                          disabled={sending}
+                          onClick={() => handleSend(workflow.prompt)}
+                          className="group flex min-h-[124px] items-start gap-3 rounded-xl border border-[#E4E8E0] bg-[#FBFBF7] p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-[#A6B98F] hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50 dark:border-[#2C3730] dark:bg-[#101713] dark:hover:border-[#C5F36A]/60"
+                        >
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#E4E8E0] bg-white text-[#243329] transition-colors group-hover:border-[#C5F36A] group-hover:bg-[#C5F36A]/20 dark:border-[#354139] dark:bg-[#1D2520] dark:text-[#C5F36A]">
+                            <Icon className="h-4 w-4" aria-hidden="true" />
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block text-sm font-semibold text-[#101713] dark:text-[#F7F7F0]">{workflow.title}</span>
+                            <span className="mt-1 block text-xs leading-relaxed text-[#71806E] dark:text-[#9EAD9B]">{workflow.description}</span>
+                            <span className="mt-3 inline-flex items-center text-[10px] font-semibold uppercase tracking-wider text-[#5E6B5B] group-hover:text-[#101713] dark:text-[#C5F36A] dark:group-hover:text-[#F7F7F0]">
+                              {language === 'bn' ? 'Workflow শুরু করুন' : 'Start workflow'} <span className="ml-1" aria-hidden="true">→</span>
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+
+                <section aria-labelledby="quick-question-heading" className="space-y-2">
+                  <h3 id="quick-question-heading" className="text-[11px] font-semibold text-[#71806E] dark:text-[#8C9A88]">
+                    {language === 'bn' ? 'অথবা দ্রুত একটি প্রশ্ন করুন' : 'Or start with a quick question'}
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    {suggestedQuestions.map((q) => (
+                      <button
+                        key={q}
+                        type="button"
+                        disabled={sending}
+                        onClick={() => handleSend(q)}
+                        className="rounded-lg border border-[#E4E8E0] px-3 py-2 text-left text-xs font-medium text-[#243329] transition-colors hover:border-[#9BAA91] hover:bg-[#F7F7F0] disabled:opacity-50 dark:border-[#354139] dark:text-[#D5DDD2] dark:hover:bg-[#1D2520]"
+                      >
+                        {q}
+                      </button>
+                    ))}
+                  </div>
+                </section>
               </div>
             ) : (
               messages.map((m) => (
