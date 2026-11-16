@@ -14,6 +14,7 @@ import {
   Loader2,
   Network,
   ShieldAlert,
+  ShieldCheck,
   UploadCloud,
 } from 'lucide-react';
 import { apiRequest } from '../lib/api';

@@ -214,6 +214,13 @@ export function ApplicationsPage() {
       ? dueSoonItems
       : items;
 
+  const byMonth = visibleItems.reduce<Record<string, ApplicationItem[]>>((acc, app) => {
+    const key = app.deadline.slice(0, 7) || 'Unscheduled';
+    acc[key] = acc[key] || [];
+    acc[key].push(app);
+    return acc;
+  }, {});
+
   const calYear = calendarMonth.getFullYear();
   const calMon = calendarMonth.getMonth();
   const daysInMonth = new Date(calYear, calMon + 1, 0).getDate();
