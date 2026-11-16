@@ -8,11 +8,11 @@ import {
   Compass,
   FileCheck2,
   Kanban,
-  Radar,
   ShieldCheck,
   Target,
 } from 'lucide-react';
 import { apiRequest } from '../lib/api';
+import { OpportunityRadarCard } from '../components/dashboard/OpportunityRadarCard';
 import { useAuth } from '../context/AuthContext';
 import type { OpportunityItem } from '../types';
 import {
@@ -115,6 +115,7 @@ export function DashboardOverview({ navigate }: { navigate: (path: string) => vo
   const [savedItems, setSavedItems] = useState<OpportunityItem[]>([]);
   const [deadlineTab, setDeadlineTab] = useState<'urgent' | 'upcoming' | 'expired'>('upcoming');
   const [loading, setLoading] = useState(true);
+  const [focusMode, setFocusMode] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -160,6 +161,32 @@ export function DashboardOverview({ navigate }: { navigate: (path: string) => vo
 
   return (
     <div className="space-y-6">
+      <div className="flex flex-col gap-3 rounded-2xl border border-[#E4E8E0] bg-white/80 px-5 py-4 shadow-sm backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between dark:border-[#232D27] dark:bg-[#141B17]/85">
+        <div>
+          <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-[#71806E] dark:text-[#C5F36A]">Global command center</p>
+          <p className="mt-1 text-sm text-[#5E6B5B] dark:text-[#A9B5A6]">
+            A clear view of your next steps, deadlines, and opportunity signals.
+          </p>
+        </div>
+        <button
+          type="button"
+          aria-pressed={focusMode}
+          onClick={() => setFocusMode((current) => !current)}
+          className={`inline-flex items-center justify-center gap-2 rounded-xl border px-3.5 py-2.5 text-xs font-semibold transition-colors ${
+            focusMode
+              ? 'border-[#C5F36A] bg-[#C5F36A] text-[#101713]'
+              : 'border-[#E4E8E0] bg-[#F7F7F0] text-[#101713] hover:border-[#C5F36A] dark:border-[#2C3730] dark:bg-[#0C110E] dark:text-[#F7F7F0]'
+          }`}
+        >
+          <Target className="h-3.5 w-3.5" aria-hidden="true" />
+          {focusMode ? 'Exit focus mode' : 'Focus on next steps'}
+        </button>
+      </div>
+      {focusMode && (
+        <p className="rounded-lg border border-[#DDE8C7] bg-[#F3F8E9] px-4 py-2.5 text-xs text-[#40513A] dark:border-[#3A4B33] dark:bg-[#192319] dark:text-[#D6E9C2]" role="status">
+          Focus mode is on. Charts and saved shortcuts are tucked away; your actions, deadlines, recommendations, and safety alerts stay visible.
+        </p>
+      )}
       {/* Command Header + Opportunity Intelligence Score */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         <div className="flex flex-col justify-between rounded-2xl border border-[#232D27] bg-[#101713] p-6 text-[#F7F7F0] lg:col-span-8">
@@ -227,68 +254,18 @@ export function DashboardOverview({ navigate }: { navigate: (path: string) => vo
           </div>
         </div>
 
-        {/* Personal Opportunity Radar */}
-        <div className="flex flex-col justify-between rounded-2xl border border-[#E4E8E0] bg-white p-6 lg:col-span-4 dark:border-[#232D27] dark:bg-[#141B17]">
-          <div>
-            <div className="flex items-center justify-between">
-              <h2 className="flex items-center gap-2 font-display text-sm font-bold text-[#101713] dark:text-[#F7F7F0]">
-                <Radar className="h-4 w-4 text-[#101713] dark:text-[#C5F36A]" />
-                <span>Personal Opportunity Radar</span>
-              </h2>
-              <button
-                type="button"
-                onClick={() => navigate('/dashboard/eligibility')}
-                className="text-xs font-semibold text-[#101713] underline decoration-[#C5F36A] decoration-2 underline-offset-4 dark:text-[#C5F36A]"
-              >
-                Tune
-              </button>
-            </div>
-
-            {profileIncomplete ? (
-              <p className="mt-3 text-xs leading-relaxed text-[#5E6B5B] dark:text-[#8C9A88]">
-                Configure your academic level, GPA, target countries, and interests to calibrate your Opportunity Radar.
-              </p>
-            ) : (
-              <div className="mt-4 space-y-2.5 text-xs">
-                <div className="flex justify-between border-b border-[#E4E8E0] pb-2 dark:border-[#232D27]">
-                  <span className="text-[#5E6B5B] dark:text-[#8C9A88]">Level &amp; GPA</span>
-                  <span className="font-mono font-semibold text-[#101713] capitalize dark:text-[#F7F7F0]">
-                    {data.personalRadar.educationLevel.replace('_', ' ')} · {data.personalRadar.gpa}/{data.personalRadar.gpaScale}
-                  </span>
-                </div>
-                <div className="flex justify-between border-b border-[#E4E8E0] pb-2 dark:border-[#232D27]">
-                  <span className="text-[#5E6B5B] dark:text-[#8C9A88]">Funding Scope</span>
-                  <span className="font-medium text-[#101713] capitalize dark:text-[#F7F7F0]">
-                    {data.personalRadar.financialNeed.replace('_', ' ')}
-                  </span>
-                </div>
-                <div className="border-b border-[#E4E8E0] pb-2 dark:border-[#232D27]">
-                  <span className="text-[#5E6B5B] dark:text-[#8C9A88]">Target Countries</span>
-                  <p className="mt-1 font-medium text-[#101713] dark:text-[#F7F7F0]">
-                    {data.personalRadar.targetCountries.length > 0
-                      ? data.personalRadar.targetCountries.join(' · ')
-                      : 'Global / Open'}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-[#5E6B5B] dark:text-[#8C9A88]">Academic Focus</span>
-                  <p className="mt-1 font-medium text-[#101713] dark:text-[#F7F7F0]">
-                    {data.personalRadar.academicInterests.length > 0
-                      ? data.personalRadar.academicInterests.join(' · ')
-                      : 'Unspecified'}
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="mt-5 flex items-center justify-between rounded-lg border border-[#E4E8E0] bg-[#F7F7F0] px-3.5 py-2.5 text-xs dark:border-[#232D27] dark:bg-[#0C110E]">
-            <span className="text-[#5E6B5B] dark:text-[#8C9A88]">Active Radar Matches</span>
-            <span className="font-mono text-base font-bold text-[#101713] tabular-nums dark:text-[#C5F36A]">
-              {data.personalRadar.matchedCount}
-            </span>
-          </div>
-        </div>
+        <OpportunityRadarCard
+          matchedCount={data.personalRadar.matchedCount}
+          educationLevel={data.personalRadar.educationLevel}
+          gpa={data.personalRadar.gpa}
+          gpaScale={data.personalRadar.gpaScale}
+          financialNeed={data.personalRadar.financialNeed}
+          targetCountries={data.personalRadar.targetCountries}
+          academicInterests={data.personalRadar.academicInterests}
+          profileIncomplete={profileIncomplete}
+          onTune={() => navigate('/dashboard/eligibility')}
+          onExplore={() => navigate('/opportunities')}
+        />
       </div>
 
       {/* KPI Strip */}
@@ -451,6 +428,8 @@ export function DashboardOverview({ navigate }: { navigate: (path: string) => vo
         </div>
       </div>
 
+      {!focusMode && (
+        <>
       {/* Charts */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <DistributionRingChart
@@ -517,6 +496,9 @@ export function DashboardOverview({ navigate }: { navigate: (path: string) => vo
           ]}
         />
       </div>
+
+        </>
+      )}
 
       {/* Recommendations + Risk Alerts */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
@@ -619,6 +601,8 @@ export function DashboardOverview({ navigate }: { navigate: (path: string) => vo
         </div>
       </div>
 
+      {!focusMode && (
+        <>
       {/* Saved Shortlist */}
       <div className="rounded-xl border border-[#E4E8E0] bg-white p-6 dark:border-[#232D27] dark:bg-[#141B17]">
         <div className="flex items-center justify-between">
@@ -662,7 +646,8 @@ export function DashboardOverview({ navigate }: { navigate: (path: string) => vo
             ))}
           </div>
         )}
-      </div>
+      </div>        </>
+      )}
     </div>
   );
 }

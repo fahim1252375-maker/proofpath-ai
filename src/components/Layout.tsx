@@ -25,6 +25,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { apiRequest } from '../lib/api';
 import type { NotificationItem } from '../types';
+import { buildOpportunitySearchPath, filterCommandPaletteEntries, type CommandPaletteEntry } from '../lib/commandPalette';
 
 export function PublicHeader({
   currentPath,
@@ -259,7 +260,9 @@ export function WorkspaceShell({
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-  const [globalQuery, setGlobalQuery] = useState('');
+  const [commandOpen, setCommandOpen] = useState(false);
+  const [commandQuery, setCommandQuery] = useState('');
+  const [activeCommandIndex, setActiveCommandIndex] = useState(0);
 
   const loadNotifications = async () => {
     if (!user) return;
@@ -290,15 +293,6 @@ export function WorkspaceShell({
     setUnreadNotifications(0);
   };
 
-  const handleGlobalSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (globalQuery.trim()) {
-      navigate(`/opportunities?q=${encodeURIComponent(globalQuery.trim())}`);
-    } else {
-      navigate('/opportunities');
-    }
-  };
-
   const studentLinks = [
     { label: 'Command Center', path: '/dashboard', icon: <LayoutDashboard className="h-4 w-4 shrink-0" /> },
     { label: 'Verify Evidence', path: '/verify', icon: <FileCheck2 className="h-4 w-4 shrink-0" /> },
@@ -311,6 +305,90 @@ export function WorkspaceShell({
   ];
 
   const isPrivileged = user?.role === 'admin' || user?.role === 'moderator';
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setCommandOpen(true);
+        setCommandQuery('');
+        setActiveCommandIndex(0);
+      } else if (event.key === 'Escape') {
+        setCommandOpen(false);
+        setCommandQuery('');
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  useEffect(() => {
+    setActiveCommandIndex(0);
+  }, [commandQuery]);
+
+  const paletteItems: Array<CommandPaletteEntry & { icon: React.ReactNode }> = [
+    ...studentLinks.map((item) => ({
+      id: item.path,
+      label: item.label,
+      description: `Open ${item.label} in your workspace`,
+      keywords: `${item.label} ${item.path} student workspace`,
+      path: item.path,
+      icon: item.icon,
+    })),
+    {
+      id: 'preferences',
+      label: 'Preferences',
+      description: 'Manage your appearance, language, and account settings',
+      keywords: 'settings preferences theme language account',
+      path: '/dashboard/settings',
+      icon: <SlidersHorizontal className="h-4 w-4" />,
+    },
+    ...(isPrivileged
+      ? [{
+          id: 'admin',
+          label: 'Admin & Moderation',
+          description: 'Open the protected operations console',
+          keywords: 'admin moderation operations reports',
+          path: '/admin',
+          icon: <Shield className="h-4 w-4" />,
+        }]
+      : []),
+  ];
+
+  const filteredPaletteItems = filterCommandPaletteEntries(paletteItems, commandQuery);
+  const normalizedCommandQuery = commandQuery.trim();
+  const paletteResults: Array<CommandPaletteEntry & { icon: React.ReactNode }> = [
+    ...(normalizedCommandQuery
+      ? [{
+          id: 'opportunity-search',
+          label: `Search opportunities for "${normalizedCommandQuery}"`,
+          description: 'Search scholarships, internships, fellowships, grants, and competitions',
+          keywords: 'search discover opportunities catalog',
+          path: buildOpportunitySearchPath(normalizedCommandQuery),
+          icon: <Search className="h-4 w-4" />,
+        }]
+      : []),
+    ...filteredPaletteItems,
+  ];
+
+  const openCommandPalette = () => {
+    setCommandQuery('');
+    setActiveCommandIndex(0);
+    setCommandOpen(true);
+  };
+
+  const closeCommandPalette = () => {
+    setCommandOpen(false);
+    setCommandQuery('');
+    setActiveCommandIndex(0);
+  };
+
+  const runPaletteCommand = (path: string) => {
+    closeCommandPalette();
+    setMobileDrawer(false);
+    navigate(path);
+  };
 
   const SidebarContent = (
     <div className="flex h-full flex-col justify-between">
@@ -462,17 +540,22 @@ export function WorkspaceShell({
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
-            <form onSubmit={handleGlobalSearch} className="relative hidden md:block">
-              <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[#8C9A88]" />
-              <input
-                type="search"
-                value={globalQuery}
-                onChange={(e) => setGlobalQuery(e.target.value)}
-                placeholder="Search opportunities..."
-                aria-label="Global opportunity search"
-                className="h-9 w-52 rounded-lg border border-[#E4E8E0] bg-[#F7F7F0] pr-3 pl-9 text-sm text-[#101713] placeholder:text-[#8C9A88] focus:border-[#101713] focus:outline-none lg:w-64 dark:border-[#232D27] dark:bg-[#0C110E] dark:text-[#F7F7F0] dark:focus:border-[#C5F36A]"
-              />
-            </form>
+            <button
+              type="button"
+              onClick={openCommandPalette}
+              aria-label="Open command palette"
+              aria-haspopup="dialog"
+              aria-keyshortcuts="Control+K Meta+K"
+              className="inline-flex h-9 w-9 items-center justify-center gap-2 rounded-lg border border-[#E4E8E0] text-[#5E6B5B] transition-colors hover:border-[#9BAA91] hover:bg-[#F7F7F0] sm:w-60 sm:justify-between sm:px-3 dark:border-[#232D27] dark:text-[#A9B5A6] dark:hover:bg-[#1D2520] lg:w-72"
+            >
+              <span className="inline-flex min-w-0 items-center gap-2">
+                <Search className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <span className="hidden truncate text-xs sm:inline">Search or jump to...</span>
+              </span>
+              <kbd className="hidden rounded border border-[#E4E8E0] bg-[#F7F7F0] px-1.5 py-0.5 font-mono text-[10px] text-[#5E6B5B] lg:inline-flex dark:border-[#354139] dark:bg-[#0C110E] dark:text-[#A9B5A6]">
+                ⌘ K
+              </kbd>
+            </button>
 
             <button
               type="button"
@@ -623,6 +706,116 @@ export function WorkspaceShell({
             )}
           </div>
         </header>
+
+        {commandOpen && (
+          <div
+            className="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto bg-[#101713]/60 px-4 pb-8 pt-[10vh] backdrop-blur-sm"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) closeCommandPalette();
+            }}
+          >
+            <section
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="command-palette-title"
+              className="w-full max-w-2xl overflow-hidden rounded-2xl border border-[#E4E8E0] bg-white shadow-2xl shadow-[#101713]/20 dark:border-[#2C3730] dark:bg-[#141B17]"
+            >
+              <div className="flex items-center gap-3 border-b border-[#E4E8E0] px-4 py-4 dark:border-[#232D27] sm:px-5">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#C5F36A]/25 text-[#101713] dark:bg-[#C5F36A]/15 dark:text-[#C5F36A]">
+                  <Search className="h-5 w-5" aria-hidden="true" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <h2 id="command-palette-title" className="sr-only">ProofPath command palette</h2>
+                  <input
+                    autoFocus
+                    type="search"
+                    value={commandQuery}
+                    onChange={(event) => setCommandQuery(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'ArrowDown') {
+                        event.preventDefault();
+                        setActiveCommandIndex((index) => Math.min(index + 1, paletteResults.length - 1));
+                      } else if (event.key === 'ArrowUp') {
+                        event.preventDefault();
+                        setActiveCommandIndex((index) => Math.max(0, index - 1));
+                      } else if (event.key === 'Enter') {
+                        event.preventDefault();
+                        const selected = paletteResults[activeCommandIndex];
+                        if (selected) runPaletteCommand(selected.path);
+                      }
+                    }}
+                    placeholder="Search opportunities or jump to a workspace..."
+                    aria-label="Search opportunities or workspace pages"
+                    aria-controls="command-palette-results"
+                    aria-activedescendant={paletteResults[activeCommandIndex] ? `command-option-${activeCommandIndex}` : undefined}
+                    className="w-full border-0 bg-transparent text-base text-[#101713] outline-none placeholder:text-[#8C9A88] dark:text-[#F7F7F0] dark:placeholder:text-[#748274]"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={closeCommandPalette}
+                  aria-label="Close command palette"
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[#5E6B5B] transition-colors hover:bg-[#F7F7F0] dark:text-[#8C9A88] dark:hover:bg-[#1D2520]"
+                >
+                  <X className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between px-5 pb-2 pt-4">
+                <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[#71806E] dark:text-[#9EAD9B]">
+                  {normalizedCommandQuery ? 'Search & navigation' : 'Quick navigation'}
+                </p>
+                <span className="text-[10px] text-[#8C9A88]">{paletteResults.length} results</span>
+              </div>
+
+              <div id="command-palette-results" role="listbox" aria-label="Command palette results" className="max-h-[52vh] overflow-y-auto px-3 pb-3">
+                {paletteResults.length === 0 ? (
+                  <div className="px-4 py-9 text-center">
+                    <p className="text-sm font-semibold text-[#101713] dark:text-[#F7F7F0]">No workspace actions found</p>
+                    <p className="mt-1 text-xs text-[#71806E] dark:text-[#8C9A88]">Try “applications”, “verify”, or search for an opportunity.</p>
+                  </div>
+                ) : (
+                  paletteResults.map((item, index) => (
+                    <button
+                      id={`command-option-${index}`}
+                      key={item.id}
+                      type="button"
+                      role="option"
+                      aria-selected={activeCommandIndex === index}
+                      onMouseEnter={() => setActiveCommandIndex(index)}
+                      onClick={() => runPaletteCommand(item.path)}
+                      className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors ${activeCommandIndex === index
+                        ? 'bg-[#F0F3E9] text-[#101713] dark:bg-[#202B23] dark:text-[#F7F7F0]'
+                        : 'text-[#263229] hover:bg-[#F7F7F0] dark:text-[#D5DDD2] dark:hover:bg-[#1D2520]'}`}
+                    >
+                      <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border ${activeCommandIndex === index
+                        ? 'border-[#C5F36A] bg-[#C5F36A]/35 text-[#101713] dark:bg-[#C5F36A]/15 dark:text-[#C5F36A]'
+                        : 'border-[#E4E8E0] bg-white text-[#5E6B5B] dark:border-[#354139] dark:bg-[#0C110E] dark:text-[#A9B5A6]'}`}>
+                        {item.icon}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-semibold">{item.label}</span>
+                        <span className="mt-0.5 block truncate text-xs text-[#71806E] dark:text-[#8C9A88]">{item.description}</span>
+                      </span>
+                      <span className="hidden shrink-0 items-center gap-1 font-mono text-[10px] text-[#8C9A88] sm:inline-flex">
+                        <span>Open</span>
+                        <span aria-hidden="true">↵</span>
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#E4E8E0] bg-[#FBFCF8] px-4 py-3 text-[10px] text-[#71806E] dark:border-[#232D27] dark:bg-[#101713] dark:text-[#8C9A88] sm:px-5">
+                <span>Search the catalog or move around ProofPath without leaving the keyboard.</span>
+                <span className="flex items-center gap-2 font-mono">
+                  <span><kbd className="rounded border border-[#D7DED2] px-1">↑</kbd> <kbd className="rounded border border-[#D7DED2] px-1">↓</kbd> move</span>
+                  <span><kbd className="rounded border border-[#D7DED2] px-1">ESC</kbd> close</span>
+                </span>
+              </div>
+            </section>
+          </div>
+        )}
 
         <main className="mx-auto w-full max-w-7xl flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
       </div>

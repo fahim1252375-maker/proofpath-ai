@@ -5,7 +5,10 @@ import {
   CheckSquare,
   ChevronLeft,
   ChevronRight,
+  Clock3,
+  Filter,
   Kanban,
+  ListChecks,
   List,
   Plus,
   Trash2,
@@ -38,11 +41,22 @@ function computeReadiness(app: ApplicationItem) {
   return { totalChecklist, doneChecklist, totalDocs, readyDocs, percent, missingDocs, pendingSteps };
 }
 
+function daysUntilDeadline(deadline: string): number | null {
+  const match = /^(\\d{4})-(\\d{2})-(\\d{2})/.exec(deadline || '');
+  if (!match) return null;
+  const [, year, month, day] = match.map(Number) as unknown as [number, number, number, number];
+  const due = new Date(year, month - 1, day);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.round((due.getTime() - today.getTime()) / 86_400_000);
+}
+
 export function ApplicationsPage() {
   const { addToast } = useAuth();
   const [items, setItems] = useState<ApplicationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'kanban' | 'list' | 'calendar'>('kanban');
+  const [quickFilter, setQuickFilter] = useState<'all' | 'needs_action' | 'due_soon'>('all');
   const [selected, setSelected] = useState<ApplicationItem | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ApplicationItem | null>(null);
@@ -185,8 +199,22 @@ export function ApplicationsPage() {
         )
       : 0;
 
-  // Group deadlines by month & build calendar cells
-  const byMonth = items.reduce<Record<string, ApplicationItem[]>>((acc, app) => {
+  const activeApplications = items.filter((app) => app.status !== 'accepted' && app.status !== 'rejected');
+  const needsActionItems = activeApplications.filter((app) => {
+    const readiness = computeReadiness(app);
+    return readiness.pendingSteps > 0 || readiness.missingDocs > 0;
+  });
+  const dueSoonItems = activeApplications.filter((app) => {
+    const days = daysUntilDeadline(app.deadline);
+    return days !== null && days >= 0 && days <= 14;
+  });
+  const visibleItems = quickFilter === 'needs_action'
+    ? needsActionItems
+    : quickFilter === 'due_soon'
+      ? dueSoonItems
+      : items;
+
+  const byMonth = visibleItems.reduce<Record<string, ApplicationItem[]>>((acc, app) => {
     const key = app.deadline.slice(0, 7) || 'Unscheduled';
     acc[key] = acc[key] || [];
     acc[key].push(app);
@@ -286,6 +314,41 @@ export function ApplicationsPage() {
         </div>
       )}
 
+      {items.length > 0 && (
+        <section className="flex flex-col gap-3 rounded-xl border border-[#E4E8E0] bg-white p-4 sm:flex-row sm:items-center sm:justify-between dark:border-[#232D27] dark:bg-[#141B17]" aria-label="Application quick filters">
+          <div>
+            <p className="flex items-center gap-2 text-xs font-bold text-[#101713] dark:text-[#F7F7F0]">
+              <Filter className="h-3.5 w-3.5 text-[#65765F] dark:text-[#C5F36A]" aria-hidden="true" />
+              Quick focus
+            </p>
+            <p className="mt-1 text-[11px] text-[#5E6B5B] dark:text-[#8C9A88]">Filter every view using your real checklist and deadline data.</p>
+          </div>
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter tracked applications">
+            {[
+              { id: 'all', label: 'All applications', count: items.length, icon: null },
+              { id: 'needs_action', label: 'Needs action', count: needsActionItems.length, icon: <ListChecks className="h-3.5 w-3.5" aria-hidden="true" /> },
+              { id: 'due_soon', label: 'Due in 14 days', count: dueSoonItems.length, icon: <Clock3 className="h-3.5 w-3.5" aria-hidden="true" /> },
+            ].map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                aria-pressed={quickFilter === option.id}
+                onClick={() => setQuickFilter(option.id as typeof quickFilter)}
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-[11px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8BB65A] ${
+                  quickFilter === option.id
+                    ? 'border-[#101713] bg-[#101713] text-[#C5F36A] dark:border-[#C5F36A] dark:bg-[#C5F36A] dark:text-[#101713]'
+                    : 'border-[#E4E8E0] bg-[#F7F7F0] text-[#40513A] hover:border-[#9BB58D] dark:border-[#2C3730] dark:bg-[#0C110E] dark:text-[#D5DDD2]'
+                }`}
+              >
+                {option.icon}
+                {option.label}
+                <span className="rounded-md bg-black/5 px-1.5 py-0.5 font-mono tabular-nums dark:bg-white/10">{option.count}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
       {loading ? (
         <SkeletonBlock className="h-80 rounded-xl" />
       ) : items.length === 0 ? (
@@ -303,10 +366,18 @@ export function ApplicationsPage() {
             </button>
           }
         />
+      ) : visibleItems.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-[#C9D5C2] bg-white p-8 text-center dark:border-[#344438] dark:bg-[#141B17]">
+          <p className="font-display text-base font-bold text-[#101713] dark:text-[#F7F7F0]">Nothing needs attention in this view.</p>
+          <p className="mt-1 text-xs text-[#5E6B5B] dark:text-[#8C9A88]">Try another filter or return to your full application pipeline.</p>
+          <button type="button" onClick={() => setQuickFilter('all')} className="mt-4 rounded-lg bg-[#101713] px-3.5 py-2 text-xs font-semibold text-[#C5F36A] dark:bg-[#C5F36A] dark:text-[#101713]">
+            Show all applications
+          </button>
+        </div>
       ) : view === 'kanban' ? (
         <div className="grid grid-cols-1 gap-4 overflow-x-auto pb-2 md:grid-cols-3 xl:grid-cols-6">
           {STAGES.map((stage) => {
-            const stageApps = items.filter((i) => i.status === stage.id);
+            const stageApps = visibleItems.filter((i) => i.status === stage.id);
             return (
               <div
                 key={stage.id}
@@ -385,7 +456,7 @@ export function ApplicationsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[#E4E8E0] dark:divide-[#232D27]">
-              {items.map((app) => {
+              {visibleItems.map((app) => {
                 const r = computeReadiness(app);
                 return (
                   <tr key={app.id} className="hover:bg-[#F7F7F0] dark:hover:bg-[#1D2520]">
@@ -475,7 +546,7 @@ export function ApplicationsPage() {
               {Array.from({ length: daysInMonth }).map((_, idx) => {
                 const day = idx + 1;
                 const iso = `${monthPrefix}-${String(day).padStart(2, '0')}`;
-                const dayApps = items.filter((a) => a.deadline.startsWith(iso));
+                const dayApps = visibleItems.filter((a) => a.deadline.startsWith(iso));
                 return (
                   <div
                     key={iso}
