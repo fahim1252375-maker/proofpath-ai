@@ -251,7 +251,8 @@ export function VerificationWorkspace({
         <div className="space-y-6 lg:col-span-5">
           <form
             onSubmit={handleRunVerification}
-            className="rounded-xl border border-[#E4E8E0] bg-white p-6 dark:border-[#232D27] dark:bg-[#141B17]"
+            aria-busy={running}
+            className="pp-card rounded-xl border border-[#E4E8E0] bg-white p-6 dark:border-[#232D27] dark:bg-[#141B17]"
           >
             <div className="flex items-center gap-1 rounded-lg bg-[#F7F7F0] p-1 dark:bg-[#0C110E]">
               {[
@@ -277,10 +278,11 @@ export function VerificationWorkspace({
 
             <div className="mt-5 space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-[#101713] dark:text-[#F7F7F0]">
+                <label htmlFor="verification-title" className="block text-xs font-semibold text-[#101713] dark:text-[#F7F7F0]">
                   Opportunity Title (optional)
                 </label>
                 <input
+                  id="verification-title"
                   type="text"
                   value={titleInput}
                   onChange={(e) => setTitleInput(e.target.value)}
@@ -291,10 +293,11 @@ export function VerificationWorkspace({
 
               {mode === 'url' && (
                 <div>
-                  <label className="block text-xs font-semibold text-[#101713] dark:text-[#F7F7F0]">
+                  <label htmlFor="verification-url" className="block text-xs font-semibold text-[#101713] dark:text-[#F7F7F0]">
                     Official or Recruiting URL
                   </label>
                   <input
+                    id="verification-url"
                     type="url"
                     required
                     value={urlInput}
@@ -311,10 +314,11 @@ export function VerificationWorkspace({
               {mode === 'text' && (
                 <>
                   <div>
-                    <label className="block text-xs font-semibold text-[#101713] dark:text-[#F7F7F0]">
+                    <label htmlFor="verification-text" className="block text-xs font-semibold text-[#101713] dark:text-[#F7F7F0]">
                       Announcement / Email / Message Text
                     </label>
                     <textarea
+                      id="verification-text"
                       required
                       minLength={20}
                       rows={6}
@@ -325,10 +329,11 @@ export function VerificationWorkspace({
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-[#101713] dark:text-[#F7F7F0]">
+                    <label htmlFor="verification-reference-url" className="block text-xs font-semibold text-[#101713] dark:text-[#F7F7F0]">
                       Referenced Link (optional)
                     </label>
                     <input
+                      id="verification-reference-url"
                       type="url"
                       value={refUrlInput}
                       onChange={(e) => setRefUrlInput(e.target.value)}
@@ -341,10 +346,10 @@ export function VerificationWorkspace({
 
               {mode === 'file' && (
                 <div>
-                  <label className="block text-xs font-semibold text-[#101713] dark:text-[#F7F7F0]">
+                  <label htmlFor="verification-file" className="block text-xs font-semibold text-[#101713] dark:text-[#F7F7F0]">
                     Upload PDF Prospectus, Offer Letter, Poster, or Screenshot
                   </label>
-                  <label className="mt-1 flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-[#CFD7C9] bg-[#F7F7F0] px-4 py-8 text-center transition-colors hover:border-[#101713] dark:border-[#2C3730] dark:bg-[#0C110E] dark:hover:border-[#C5F36A]">
+                  <label htmlFor="verification-file" className="pp-upload-label mt-1 flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-[#CFD7C9] bg-[#F7F7F0] px-4 py-8 text-center transition-colors hover:border-[#101713] dark:border-[#2C3730] dark:bg-[#0C110E] dark:hover:border-[#C5F36A]">
                     <UploadCloud className="h-7 w-7 text-[#101713] dark:text-[#C5F36A]" />
                     <span className="mt-2 text-sm font-semibold text-[#101713] dark:text-[#F7F7F0]">
                       {selectedFile ? selectedFile.name : 'Choose PDF, PNG, JPEG, or WEBP'}
@@ -353,9 +358,10 @@ export function VerificationWorkspace({
                       Maximum 10 MB · Magic-byte verified
                     </span>
                     <input
+                      id="verification-file"
                       type="file"
                       accept=".pdf,image/png,image/jpeg,image/webp"
-                      className="hidden"
+                      className="sr-only"
                       onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
                     />
                   </label>
@@ -363,10 +369,14 @@ export function VerificationWorkspace({
               )}
 
               {error && (
-                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+                <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
                   {error}
                 </div>
               )}
+
+              <p className="sr-only" role="status" aria-live="polite">
+                {running ? 'Evidence audit is running. This may take a moment.' : ''}
+              </p>
 
               <button
                 type="submit"
@@ -437,7 +447,7 @@ export function VerificationWorkspace({
         {/* Report Display */}
         <div className="lg:col-span-7">
           {running ? (
-            <div className="space-y-4 rounded-xl border border-[#E4E8E0] bg-white p-6 dark:border-[#232D27] dark:bg-[#141B17]">
+            <div className="space-y-4 rounded-xl border border-[#E4E8E0] bg-white p-6 dark:border-[#232D27] dark:bg-[#141B17]" aria-busy="true" aria-label="Audit report loading">
               <SkeletonBlock className="h-8 w-2/3" />
               <SkeletonBlock className="h-20" />
               <SkeletonBlock className="h-32" />

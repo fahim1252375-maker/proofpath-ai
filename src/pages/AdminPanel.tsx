@@ -338,6 +338,9 @@ export function AdminPanel() {
               onSubmit={handleCreateOpp}
               className="grid grid-cols-1 gap-3 rounded-xl border border-[#E4E8E0] bg-white p-5 sm:grid-cols-2 dark:border-[#232D27] dark:bg-[#141B17]"
             >
+              <p className="text-xs leading-relaxed text-[#5E6B5B] sm:col-span-2 dark:text-[#A9B5A6]" role="note">
+                New listings start as unverified. Review the official source before changing their verification status.
+              </p>
               <input
                 required
                 placeholder="Opportunity Title"
@@ -384,7 +387,7 @@ export function AdminPanel() {
               <textarea
                 required
                 rows={2}
-                placeholder="Verified program description..."
+                placeholder="Program description..."
                 value={oppForm.description}
                 onChange={(e) => setOppForm({ ...oppForm, description: e.target.value })}
                 className="rounded-lg border border-[#E4E8E0] bg-[#F7F7F0] p-2.5 text-xs sm:col-span-2 dark:border-[#232D27] dark:bg-[#0C110E]"

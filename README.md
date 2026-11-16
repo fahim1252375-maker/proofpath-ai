@@ -42,12 +42,12 @@ SQLite persists to `DB_PATH` (defaults to `./data/proofpath.db`). Migrations run
 
 ### Development Evaluation Accounts
 
-Seeded only when `NODE_ENV !== 'production'` and explicitly blocked from signing in when `NODE_ENV === 'production'`:
+Demo accounts, opportunity listings, and the sample verification report are seeded only outside production. Demo accounts are also blocked from signing in when `NODE_ENV === 'production'`:
 - **Student**: `student@proofpath.ai` / `Student@2026!`
 - **Moderator**: `moderator@proofpath.ai` / `Moderator@2026!`
 - **Admin**: `admin@proofpath.ai` / `Admin@2026!`
 
-In production deployments, register standard accounts via `/register` or provision administrators directly on the database.
+In production deployments, register standard accounts via `/register` or provision administrators directly on the database. New opportunities start as `UNVERIFIED`; an authorized reviewer must inspect the official source before assigning a verification state. Existing production rows are not changed by this startup guard and should be audited separately before launch.
 
 ## Environment Variables
 
@@ -56,6 +56,8 @@ Copy `.env.example` to `.env` and configure:
 - `APP_URL`: Public URL of the deployed service.
 - `SESSION_SECRET`: Random high-entropy string for HMAC session token hashing.
 - `DB_PATH`: Path to persistent SQLite file (e.g., `./data/proofpath.db`).
+
+For production, set `NODE_ENV=production`, use a unique `SESSION_SECRET` with at least 32 characters, set `APP_URL` to the deployed HTTPS origin, and store `DB_PATH` on persistent storage. The server fails at startup when the production session secret is missing or too short. Generate one with `openssl rand -hex 32`; never commit it or reuse the example value from `.env.example`.
 
 ## Local Development, Testing & Deployment
 
@@ -72,11 +74,15 @@ npm start        # Serves production API + static dist/ via tsx server.ts
 
 - **Authentication**: `crypto.scryptSync` salted password hashing + `crypto.timingSafeEqual` verification, HTTP-only `SameSite=Lax` cookies, and per-session `X-CSRF-Token` validation on state-changing requests. Demo evaluation accounts are disabled in production (`NODE_ENV === 'production'`).
 - **SSRF Protection**: Rejects `localhost`, loopback, link-local, cloud metadata (`169.254.169.254`), and private IPv4/IPv6 CIDR ranges before fetching external URLs.
+- **Pinned URL fetches**: Resolves every host and redirect, rejects restricted results, pins the request to the validated address to prevent DNS rebinding, and caps fetched text at 120 KB with a seven-second timeout.
+- **Production browser headers**: Enables a restrictive Content Security Policy and HSTS in production; CSRF token comparisons use constant-time equality.
 - **Upload Validation**: 10 MB limit, MIME allowlist (`PDF`, `PNG`, `JPEG`, `WEBP`), and binary magic-byte header verification.
 - **Role-Based Access Control**: Server-side `requireRole('admin', 'moderator')` enforcement on all administrative and moderation endpoints with persistent `admin_audit_logs`.
 
 
 ## ProofPath AI 3.0 — Trust Intelligence
+
+See [`docs/PRODUCT_RESEARCH.md`](./docs/PRODUCT_RESEARCH.md) for the product research, design rationale, reference-site inspection limits, and scope of this transformation pass.
 
 The 3.0 trust layer adds the following capabilities:
 

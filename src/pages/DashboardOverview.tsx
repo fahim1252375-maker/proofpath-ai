@@ -116,9 +116,12 @@ export function DashboardOverview({ navigate }: { navigate: (path: string) => vo
   const [deadlineTab, setDeadlineTab] = useState<'urgent' | 'upcoming' | 'expired'>('upcoming');
   const [loading, setLoading] = useState(true);
   const [focusMode, setFocusMode] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const [loadAttempt, setLoadAttempt] = useState(0);
 
   useEffect(() => {
     setLoading(true);
+    setLoadError('');
     Promise.all([
       apiRequest<StudentAnalyticsPayload>('/api/analytics/student'),
       apiRequest<{ items: OpportunityItem[] }>('/api/saved'),
@@ -130,10 +133,13 @@ export function DashboardOverview({ navigate }: { navigate: (path: string) => vo
           setDeadlineTab('urgent');
         }
       })
+      .catch((err) => {
+        setLoadError(err instanceof Error ? err.message : 'The dashboard data could not be loaded.');
+      })
       .finally(() => setLoading(false));
-  }, []);
+  }, [loadAttempt]);
 
-  if (loading || !data) {
+  if (loading) {
     return (
       <div className="space-y-6">
         <SkeletonBlock className="h-44 rounded-2xl" />
@@ -147,6 +153,27 @@ export function DashboardOverview({ navigate }: { navigate: (path: string) => vo
           <SkeletonBlock className="h-64 rounded-xl" />
           <SkeletonBlock className="h-64 rounded-xl" />
         </div>
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div role="alert">
+        <EmptyState
+          icon={<AlertTriangle className="h-5 w-5" />}
+          title="Your dashboard could not load"
+          description={loadError || 'Try again in a moment.'}
+          action={(
+            <button
+              type="button"
+              onClick={() => setLoadAttempt((attempt) => attempt + 1)}
+              className="rounded-lg bg-[#101713] px-4 py-2.5 text-sm font-semibold text-[#C5F36A] hover:bg-[#1D2520] dark:bg-[#C5F36A] dark:text-[#101713]"
+            >
+              Try again
+            </button>
+          )}
+        />
       </div>
     );
   }
@@ -189,7 +216,7 @@ export function DashboardOverview({ navigate }: { navigate: (path: string) => vo
       )}
       {/* Command Header + Opportunity Intelligence Score */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        <div className="flex flex-col justify-between rounded-2xl border border-[#232D27] bg-[#101713] p-6 text-[#F7F7F0] lg:col-span-8">
+        <div className="pp-dashboard-hero flex flex-col justify-between rounded-2xl border border-[#232D27] bg-[#101713] p-6 text-[#F7F7F0] lg:col-span-8">
           <div className="flex flex-col gap-6 sm:flex-row sm:items-center">
             <IntelligenceScoreGauge score={data.intelligenceScore.totalScore} />
             <div className="min-w-0 flex-1">
@@ -506,10 +533,10 @@ export function DashboardOverview({ navigate }: { navigate: (path: string) => vo
           <div className="flex items-center justify-between">
             <div>
               <h2 className="font-display text-base font-bold text-[#101713] dark:text-[#F7F7F0]">
-                Recommended Verified Opportunities
+                Recommended Opportunities
               </h2>
               <p className="text-xs text-[#5E6B5B] dark:text-[#8C9A88]">
-                Matched to your eligibility profile &amp; Match Intelligence
+                Matched to your eligibility profile &amp; Match Intelligence. Review each listing's evidence status.
               </p>
             </div>
             <button

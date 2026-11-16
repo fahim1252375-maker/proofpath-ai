@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -104,6 +104,52 @@ export function SkeletonBlock({ className = 'h-6 w-full' }: { className?: string
       className={`animate-pulse rounded-lg bg-[#E4E8E0] dark:bg-[#1D2520] ${className}`}
       aria-hidden="true"
     />
+  );
+}
+
+/** Scroll reveal that stays visible to assistive technology and skips motion when requested. */
+export function Reveal({
+  children,
+  className = '',
+  delay = 0,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  delay?: number;
+}) {
+  const elementRef = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const element = elementRef.current;
+    if (!element) return;
+
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reducedMotion || !('IntersectionObserver' in window)) {
+      setVisible(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry?.isIntersecting) return;
+        setVisible(true);
+        observer.unobserve(element);
+      },
+      { threshold: 0.08, rootMargin: '0px 0px -5% 0px' }
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div
+      ref={elementRef}
+      className={`pp-reveal ${visible ? 'is-visible' : ''} ${className}`.trim()}
+      style={{ '--reveal-delay': `${Math.max(0, Math.min(delay, 360))}ms` } as React.CSSProperties}
+    >
+      {children}
+    </div>
   );
 }
 

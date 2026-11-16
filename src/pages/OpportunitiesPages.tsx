@@ -709,9 +709,11 @@ export function OpportunityDetailPage({
                 </span>
               </div>
               <div className="flex justify-between gap-2">
-                <span className="text-[#5E6B5B] dark:text-[#8C9A88]">Last Verified</span>
+                <span className="text-[#5E6B5B] dark:text-[#8C9A88]">Last source review</span>
                 <span className="font-mono text-[#101713] tabular-nums dark:text-[#F7F7F0]">
-                  {new Date(opp.lastVerifiedAt).toLocaleDateString()}
+                  {opp.verificationStatus === 'UNVERIFIED' || opp.verificationStatus === 'INSUFFICIENT_EVIDENCE'
+                    ? 'Not yet reviewed'
+                    : new Date(opp.lastVerifiedAt).toLocaleDateString()}
                 </span>
               </div>
             </div>

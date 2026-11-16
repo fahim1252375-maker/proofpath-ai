@@ -315,6 +315,33 @@ describe('ProofPath AI Enterprise API & Security Suite', () => {
     const data = await loginRes.json();
     expect(data.user.role).toBe('admin');
 
+    const createOpportunity = await fetch(`${baseUrl}/api/admin/opportunities`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: cookie,
+        'X-CSRF-Token': data.csrfToken,
+      },
+      body: JSON.stringify({
+        title: 'Review Pending Opportunity',
+        organization: 'Example Institute',
+        country: 'Example Country',
+        category: 'scholarship',
+        educationLevel: 'masters',
+        fundingType: 'fully_funded',
+        fundingAmount: 'Varies by program',
+        deadline: '2027-06-01',
+        officialUrl: 'https://example.org/scholarships',
+        description: 'A new opportunity awaiting source review.',
+      }),
+    });
+    expect(createOpportunity.status).toBe(201);
+    const createdOpportunity = await createOpportunity.json();
+    const createdRow = db
+      .prepare('SELECT verification_status FROM opportunities WHERE id = ?')
+      .get(createdOpportunity.id) as { verification_status: string };
+    expect(createdRow.verification_status).toBe('UNVERIFIED');
+
     const usersRes = await fetch(`${baseUrl}/api/admin/users`, {
       headers: { Cookie: cookie },
     });

@@ -3,6 +3,24 @@ import type { Request, Response, NextFunction } from 'express';
 
 const SCRYPT_KEYLEN = 64;
 
+export function assertProductionSecurityConfiguration(): void {
+  if (process.env.NODE_ENV !== 'production') return;
+  const sessionSecret = process.env.SESSION_SECRET?.trim() || '';
+  if (
+    sessionSecret.length < 32 ||
+    sessionSecret === 'replace-with-32-char-random-secret' ||
+    sessionSecret === 'proofpath-local-session-salt'
+  ) {
+    throw new Error('Production requires SESSION_SECRET to be a unique random value of at least 32 characters.');
+  }
+}
+
+export function timingSafeEqualString(left: string, right: string): boolean {
+  const leftBuffer = Buffer.from(left, 'utf8');
+  const rightBuffer = Buffer.from(right, 'utf8');
+  return leftBuffer.length > 0 && leftBuffer.length === rightBuffer.length && crypto.timingSafeEqual(leftBuffer, rightBuffer);
+}
+
 export function hashPassword(password: string): string {
   const salt = crypto.randomBytes(16).toString('hex');
   const derived = crypto.scryptSync(password, salt, SCRYPT_KEYLEN).toString('hex');
@@ -25,6 +43,7 @@ export function generateToken(bytes = 32): string {
 }
 
 export function hashToken(token: string): string {
+  assertProductionSecurityConfiguration();
   const secret = process.env.SESSION_SECRET || 'proofpath-local-session-salt';
   return crypto.createHmac('sha256', secret).update(token).digest('hex');
 }
