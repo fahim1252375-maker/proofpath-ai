@@ -205,10 +205,12 @@
   align-items: center;
   justify-content: center;
   border: 1px solid rgba(197, 243, 106, 0.6);
+  top: 50%;
+  left: 50%;
   border-radius: 50%;
   background: radial-gradient(circle at 35% 28%, #344b35, #142019 72%);
   box-shadow: 0 15px 36px rgba(16, 23, 19, 0.24), inset 0 0 22px rgba(197, 243, 106, 0.14);
-  transform: translateZ(25px);
+  transform: translate(-50%, -50%) translateZ(25px);
 }
 .pp-radar-count {
   color: #f7f7f0;
