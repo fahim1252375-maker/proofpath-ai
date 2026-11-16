@@ -497,6 +497,46 @@ export function VerificationWorkspace({
                 </div>
               </div>
 
+              <details className="group rounded-xl border border-[#DDE8D4] bg-[#F5F8F0] px-4 py-3 dark:border-[#344438] dark:bg-[#141F18]">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-[#17221A] outline-none focus-visible:ring-2 focus-visible:ring-[#91B95A] focus-visible:ring-offset-2 dark:text-[#F7F7F0]">
+                  <span className="flex items-center gap-2">
+                    <ShieldCheck className="h-4 w-4 text-[#557A3E] dark:text-[#C5F36A]" aria-hidden="true" />
+                    How to read this verdict
+                  </span>
+                  <span className="text-xs font-medium text-[#65765F] group-open:hidden dark:text-[#A9B5A6]">Show guide +</span>
+                  <span className="hidden text-xs font-medium text-[#65765F] group-open:inline dark:text-[#A9B5A6]">Hide guide −</span>
+                </summary>
+                <div className="mt-3 grid grid-cols-1 gap-2 border-t border-[#DDE8D4] pt-3 sm:grid-cols-2 dark:border-[#344438]">
+                  <div className="rounded-lg bg-white/75 p-3 dark:bg-[#0C110E]/70">
+                    <p className="text-xs font-bold text-[#166534] dark:text-[#A7D98A]">Verified</p>
+                    <p className="mt-1 text-xs leading-relaxed text-[#53614F] dark:text-[#A9B5A6]">An authoritative primary or official domain directly confirms authenticity and details.</p>
+                  </div>
+                  <div className="rounded-lg bg-white/75 p-3 dark:bg-[#0C110E]/70">
+                    <p className="text-xs font-bold text-[#315D9A] dark:text-[#9CC7FF]">Supported</p>
+                    <p className="mt-1 text-xs leading-relaxed text-[#53614F] dark:text-[#A9B5A6]">Credible independent or official evidence supports the claims, but some details remain unconfirmed.</p>
+                  </div>
+                  <div className="rounded-lg bg-white/75 p-3 dark:bg-[#0C110E]/70">
+                    <p className="text-xs font-bold text-[#B42318] dark:text-[#FFAAA4]">Contradicted</p>
+                    <p className="mt-1 text-xs leading-relaxed text-[#53614F] dark:text-[#A9B5A6]">Retrieved evidence conflicts with one or more claims. Do not rely on the listing until the conflict is resolved.</p>
+                  </div>
+                  <div className="rounded-lg bg-white/75 p-3 dark:bg-[#0C110E]/70">
+                    <p className="text-xs font-bold text-[#946200] dark:text-[#F4D184]">Unverified</p>
+                    <p className="mt-1 text-xs leading-relaxed text-[#53614F] dark:text-[#A9B5A6]">No credible authoritative confirmation was found. This does not by itself prove fraud.</p>
+                  </div>
+                  <div className="rounded-lg bg-white/75 p-3 dark:bg-[#0C110E]/70">
+                    <p className="text-xs font-bold text-[#946200] dark:text-[#F4D184]">Insufficient evidence</p>
+                    <p className="mt-1 text-xs leading-relaxed text-[#53614F] dark:text-[#A9B5A6]">There were not enough concrete, verifiable identifiers to confirm or refute the claims.</p>
+                  </div>
+                  <div className="rounded-lg bg-white/75 p-3 dark:bg-[#0C110E]/70">
+                    <p className="text-xs font-bold text-[#65765F] dark:text-[#C5F36A]">Expired</p>
+                    <p className="mt-1 text-xs leading-relaxed text-[#53614F] dark:text-[#A9B5A6]">The recorded deadline has passed. Check the official page for a formal extension or a new application cycle.</p>
+                  </div>
+                </div>
+                <p className="mt-3 rounded-lg border border-[#DDE8D4] bg-[#ECF2E5] px-3 py-2 text-xs leading-relaxed text-[#40513A] dark:border-[#344438] dark:bg-[#1A291D] dark:text-[#D6E9C2]">
+                  A verdict is an evidence snapshot from the time of this check, not a guarantee. Open the cited official source and confirm deadlines, eligibility, and any fee request before sending money or sensitive documents.
+                </p>
+              </details>
+
               {/* Sub-View Explorer Switcher */}
               <div className="flex flex-wrap items-center gap-1 rounded-lg bg-[#F7F7F0] p-1 dark:bg-[#0C110E]">
                 {[
