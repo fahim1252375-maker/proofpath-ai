@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Bell,
   Bot,
@@ -36,6 +36,8 @@ export function PublicHeader({
 }) {
   const { user } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const mobileMenuRef = useRef<HTMLDivElement | null>(null);
+  const mobileTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   const navItems = [
     { label: 'Opportunities', path: '/opportunities' },
@@ -48,7 +50,35 @@ export function PublicHeader({
   const handleNav = (path: string) => {
     setMobileOpen(false);
     navigate(path);
+    window.requestAnimationFrame(() => mobileTriggerRef.current?.focus());
   };
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const menu = mobileMenuRef.current;
+    const focusable = menu ? Array.from(menu.querySelectorAll<HTMLElement>('button:not([disabled])')) : [];
+    focusable[0]?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setMobileOpen(false);
+        window.requestAnimationFrame(() => mobileTriggerRef.current?.focus());
+        return;
+      }
+      if (event.key !== 'Tab' || focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [mobileOpen]);
 
   return (
     <header className="sticky top-0 z-40 border-b border-[#E4E8E0] bg-[#F7F7F0]/95 backdrop-blur-sm dark:border-[#232D27] dark:bg-[#0C110E]/95">
@@ -70,6 +100,7 @@ export function PublicHeader({
               <button
                 key={item.path}
                 type="button"
+                aria-current={currentPath === item.path ? 'page' : undefined}
                 onClick={() => handleNav(item.path)}
                 className={`text-sm font-medium transition-colors whitespace-nowrap shrink-0 ${
                   active
@@ -95,8 +126,18 @@ export function PublicHeader({
 
           <button
             type="button"
-            onClick={() => setMobileOpen((v) => !v)}
+            ref={mobileTriggerRef}
+            onClick={() => {
+              if (mobileOpen) {
+                setMobileOpen(false);
+                window.requestAnimationFrame(() => mobileTriggerRef.current?.focus());
+              } else {
+                setMobileOpen(true);
+              }
+            }}
             aria-label={mobileOpen ? 'Close navigation menu' : 'Open navigation menu'}
+            aria-expanded={mobileOpen}
+            aria-controls="public-mobile-navigation"
             className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-[#E4E8E0] text-[#101713] md:hidden dark:border-[#232D27] dark:text-[#F7F7F0]"
           >
             {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -105,7 +146,7 @@ export function PublicHeader({
       </div>
 
       {mobileOpen && (
-        <div className="border-t border-[#E4E8E0] bg-[#F7F7F0] px-4 py-4 md:hidden dark:border-[#232D27] dark:bg-[#0C110E]">
+        <div id="public-mobile-navigation" ref={mobileMenuRef} role="region" aria-label="Mobile navigation" className="border-t border-[#E4E8E0] bg-[#F7F7F0] px-4 py-4 md:hidden dark:border-[#232D27] dark:bg-[#0C110E]">
           <div className="flex flex-col gap-2">
             {navItems.map((item) => (
               <button
@@ -236,7 +277,7 @@ export function PublicFooter({ navigate }: { navigate: (path: string) => void })
 
         <div className="mt-10 flex flex-col items-start justify-between gap-4 border-t border-[#E4E8E0] pt-6 text-xs text-[#5E6B5B] sm:flex-row sm:items-center dark:border-[#232D27] dark:text-[#8C9A88]">
           <p>© {new Date().getFullYear()} ProofPath AI. Built for student opportunity transparency.</p>
-          <p className="font-mono">Evidence-backed verification · Zero fabricated citations</p>
+          <p className="font-mono">Source-linked checks · Uncertainty stays visible</p>
         </div>
       </div>
     </footer>
@@ -263,6 +304,9 @@ export function WorkspaceShell({
   const [commandOpen, setCommandOpen] = useState(false);
   const [commandQuery, setCommandQuery] = useState('');
   const [activeCommandIndex, setActiveCommandIndex] = useState(0);
+  const commandTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const mobileMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const mobileDrawerRef = useRef<HTMLElement | null>(null);
 
   const loadNotifications = async () => {
     if (!user) return;
@@ -314,14 +358,42 @@ export function WorkspaceShell({
         setCommandQuery('');
         setActiveCommandIndex(0);
       } else if (event.key === 'Escape') {
-        setCommandOpen(false);
-        setCommandQuery('');
+        if (commandOpen) {
+          setCommandOpen(false);
+          setCommandQuery('');
+          window.requestAnimationFrame(() => commandTriggerRef.current?.focus());
+        }
+        if (mobileDrawer) {
+          setMobileDrawer(false);
+          window.requestAnimationFrame(() => mobileMenuTriggerRef.current?.focus());
+        }
       }
     };
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
+  }, [commandOpen, mobileDrawer]);
+
+  useEffect(() => {
+    if (!mobileDrawer) return;
+    const drawer = mobileDrawerRef.current;
+    const focusable = drawer ? Array.from(drawer.querySelectorAll<HTMLElement>('button:not([disabled])')) : [];
+    focusable[0]?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab' || focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [mobileDrawer]);
 
   useEffect(() => {
     setActiveCommandIndex(0);
@@ -382,6 +454,7 @@ export function WorkspaceShell({
     setCommandOpen(false);
     setCommandQuery('');
     setActiveCommandIndex(0);
+    window.requestAnimationFrame(() => commandTriggerRef.current?.focus());
   };
 
   const runPaletteCommand = (path: string) => {
@@ -403,6 +476,19 @@ export function WorkspaceShell({
               ProofPath AI
             </button>
           )}
+          {mobileDrawer && (
+            <button
+              type="button"
+              onClick={() => {
+                setMobileDrawer(false);
+                window.requestAnimationFrame(() => mobileMenuTriggerRef.current?.focus());
+              }}
+              aria-label="Close workspace menu"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[#5E6B5B] hover:bg-[#F7F7F0] lg:hidden dark:text-[#A9B5A6] dark:hover:bg-[#1D2520]"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setCollapsed((c) => !c)}
@@ -413,13 +499,14 @@ export function WorkspaceShell({
           </button>
         </div>
 
-        <nav className="space-y-1 p-3" aria-label="Workspace navigation">
+        <nav className="space-y-1 overflow-y-auto p-3" aria-label="Workspace navigation">
           {studentLinks.map((item) => {
             const active = currentPath === item.path;
             return (
               <button
                 key={item.path}
                 type="button"
+                aria-current={active ? 'page' : undefined}
                 onClick={() => {
                   setMobileDrawer(false);
                   navigate(item.path);
@@ -446,6 +533,7 @@ export function WorkspaceShell({
               )}
               <button
                 type="button"
+                aria-current={currentPath === '/admin' ? 'page' : undefined}
                 onClick={() => {
                   setMobileDrawer(false);
                   navigate('/admin');
@@ -486,10 +574,10 @@ export function WorkspaceShell({
   );
 
   return (
-    <div className="flex min-h-screen bg-[#F7F7F0] text-[#101713] dark:bg-[#0C110E] dark:text-[#F7F7F0]">
+    <div className="pp-workspace-shell flex min-h-screen bg-[#F7F7F0] text-[#101713] dark:bg-[#0C110E] dark:text-[#F7F7F0]">
       {/* Desktop Sidebar */}
       <aside
-        className={`hidden shrink-0 border-r border-[#E4E8E0] bg-white transition-all duration-200 lg:block dark:border-[#232D27] dark:bg-[#141B17] ${
+        className={`sticky top-0 hidden h-screen shrink-0 overflow-y-auto border-r border-[#E4E8E0] bg-white transition-all duration-200 lg:block dark:border-[#232D27] dark:bg-[#141B17] ${
           collapsed ? 'w-[68px]' : 'w-60'
         }`}
       >
@@ -504,7 +592,16 @@ export function WorkspaceShell({
             onClick={() => setMobileDrawer(false)}
             aria-hidden="true"
           />
-          <aside className="relative z-10 w-64 bg-white dark:bg-[#141B17]">{SidebarContent}</aside>
+          <aside
+            ref={mobileDrawerRef}
+            id="workspace-mobile-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Workspace menu"
+            className="relative z-10 w-64 bg-white shadow-2xl dark:bg-[#141B17]"
+          >
+            {SidebarContent}
+          </aside>
         </div>
       )}
 
@@ -514,8 +611,11 @@ export function WorkspaceShell({
           <div className="flex min-w-0 items-center gap-3">
             <button
               type="button"
+              ref={mobileMenuTriggerRef}
               onClick={() => setMobileDrawer(true)}
               aria-label="Open workspace menu"
+              aria-expanded={mobileDrawer}
+              aria-controls="workspace-mobile-drawer"
               className="rounded-lg border border-[#E4E8E0] p-2 text-[#5E6B5B] lg:hidden dark:border-[#232D27] dark:text-[#8C9A88]"
             >
               <Menu className="h-4 w-4" />
@@ -542,6 +642,7 @@ export function WorkspaceShell({
           <div className="flex items-center gap-2 sm:gap-3">
             <button
               type="button"
+              ref={commandTriggerRef}
               onClick={openCommandPalette}
               aria-label="Open command palette"
               aria-haspopup="dialog"
@@ -817,7 +918,9 @@ export function WorkspaceShell({
           </div>
         )}
 
-        <main className="mx-auto w-full max-w-7xl flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
+        <main className="mx-auto w-full max-w-7xl flex-1 p-4 sm:p-6 lg:p-8">
+          <div key={currentPath} className="pp-page-enter">{children}</div>
+        </main>
       </div>
     </div>
   );

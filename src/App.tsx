@@ -81,9 +81,9 @@ function AppRouter() {
 
   if (isProtectedPath && !user) {
     return (
-      <div className="flex min-h-screen flex-col bg-[#F7F7F0] text-[#101713] dark:bg-[#0C110E] dark:text-[#F7F7F0]">
+      <div className="pp-public-shell flex min-h-screen flex-col bg-[#F7F7F0] text-[#101713] dark:bg-[#0C110E] dark:text-[#F7F7F0]">
         <PublicHeader currentPath="/login" navigate={navigate} />
-        <main className="flex-1">
+        <main className="pp-public-canvas flex-1">
           <LoginPage navigate={navigate} />
         </main>
         <PublicFooter navigate={navigate} />
@@ -312,9 +312,11 @@ function AppRouter() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#F7F7F0] text-[#101713] dark:bg-[#0C110E] dark:text-[#F7F7F0]">
+      <div className="pp-public-shell flex min-h-screen flex-col bg-[#F7F7F0] text-[#101713] dark:bg-[#0C110E] dark:text-[#F7F7F0]">
       <PublicHeader currentPath={pathname} navigate={navigate} />
-      <main className="flex-1">{publicContent}</main>
+        <main className="pp-public-canvas flex-1">
+          <div key={pathname} className="pp-page-enter">{publicContent}</div>
+        </main>
       <PublicFooter navigate={navigate} />
     </div>
   );

@@ -17,10 +17,11 @@ import {
   hashPassword,
   hashToken,
   sanitizeText,
+  timingSafeEqualString,
   validateMagicBytes,
   verifyPassword,
 } from './security.ts';
-import { assertSafePublicUrl, fetchPublicUrlSnippet } from './ssrf.ts';
+import { assertSafePublicUrl, fetchPublicUrlSnippet, UnsafePublicUrlError } from './ssrf.ts';
 import {
   buildTrustProfile,
   computeMatchIntelligence,
@@ -107,6 +108,13 @@ export function createApp(db: Database.Database) {
     res.setHeader('X-Frame-Options', 'SAMEORIGIN');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
     res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    if (process.env.NODE_ENV === 'production') {
+      res.setHeader(
+        'Content-Security-Policy',
+        "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self'; upgrade-insecure-requests"
+      );
+      res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    }
     next();
   });
 
@@ -172,7 +180,11 @@ export function createApp(db: Database.Database) {
       return next();
     }
     const headerToken = req.headers['x-csrf-token'];
-    if (!headerToken || headerToken !== req.csrfToken) {
+    if (
+      typeof headerToken !== 'string' ||
+      typeof req.csrfToken !== 'string' ||
+      !timingSafeEqualString(headerToken, req.csrfToken)
+    ) {
       res.status(403).json({ error: 'Invalid or missing CSRF token.' });
       return;
     }
@@ -289,14 +301,20 @@ export function createApp(db: Database.Database) {
   app.get('/api/public/stats', (_req, res) => {
     const verifiedOpportunities = (
       db
-        .prepare("SELECT COUNT(*) as c FROM opportunities WHERE is_published = 1 AND verification_status IN ('VERIFIED', 'SUPPORTED')")
+        .prepare("SELECT COUNT(*) as c FROM opportunities WHERE is_published = 1 AND verification_status = 'VERIFIED'")
         .get() as { c: number }
     ).c;
     const totalOpportunities = (
       db.prepare('SELECT COUNT(*) as c FROM opportunities WHERE is_published = 1').get() as { c: number }
     ).c;
     const verificationReports = (
-      db.prepare('SELECT COUNT(*) as c FROM verification_reports').get() as { c: number }
+      db
+        .prepare(
+          process.env.NODE_ENV === 'production'
+            ? "SELECT COUNT(*) as c FROM verification_reports WHERE user_id IS NULL AND id <> 'rep_seed_chevening'"
+            : "SELECT COUNT(*) as c FROM verification_reports WHERE user_id IS NULL OR id = 'rep_seed_chevening'"
+        )
+        .get() as { c: number }
     ).c;
     const countriesCovered = (
       db.prepare('SELECT COUNT(DISTINCT country) as c FROM opportunities WHERE is_published = 1').get() as {
@@ -1043,6 +1061,10 @@ export function createApp(db: Database.Database) {
         res.status(err.statusCode).json({ error: err.message });
         return;
       }
+      if (err instanceof UnsafePublicUrlError) {
+        res.status(400).json({ error: err.message });
+        return;
+      }
       res.status(500).json({ error: 'Unexpected error while verifying URL.' });
     }
   });
@@ -1160,11 +1182,11 @@ export function createApp(db: Database.Database) {
       const rows = db
         .prepare(
           `SELECT * FROM verification_reports
-           WHERE (user_id IS NULL OR id = 'rep_seed_chevening')
+           WHERE (user_id IS NULL OR (? = 1 AND id = 'rep_seed_chevening'))
              AND overall_status IN ('VERIFIED', 'SUPPORTED', 'CONTRADICTED', 'EXPIRED')
            ORDER BY created_at DESC LIMIT 12`
         )
-        .all() as Array<Record<string, unknown>>;
+        .all(process.env.NODE_ENV === 'production' ? 0 : 1) as Array<Record<string, unknown>>;
       res.json({ items: rows.map((r) => hydrateReportRow(db, r)) });
       return;
     }
@@ -1181,6 +1203,10 @@ export function createApp(db: Database.Database) {
       .get(req.params.id) as Record<string, unknown> | undefined;
 
     if (!row) {
+      res.status(404).json({ error: 'Verification report not found.' });
+      return;
+    }
+    if (process.env.NODE_ENV === 'production' && row.id === 'rep_seed_chevening') {
       res.status(404).json({ error: 'Verification report not found.' });
       return;
     }
@@ -1835,7 +1861,7 @@ export function createApp(db: Database.Database) {
 
     const verifiedOppsCount = (
       db
-        .prepare("SELECT COUNT(*) as c FROM opportunities WHERE is_published = 1 AND verification_status IN ('VERIFIED', 'SUPPORTED')")
+        .prepare("SELECT COUNT(*) as c FROM opportunities WHERE is_published = 1 AND verification_status = 'VERIFIED'")
         .get() as { c: number }
     ).c;
 
@@ -2160,7 +2186,7 @@ export function createApp(db: Database.Database) {
         'UNVERIFIED',
         'INSUFFICIENT_EVIDENCE',
         'EXPIRED',
-      ]).default('VERIFIED'),
+      ]).default('UNVERIFIED'),
     });
 
     const parsed = schema.safeParse(req.body);

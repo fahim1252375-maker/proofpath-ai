@@ -15,7 +15,8 @@ import {
 import { apiRequest } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import type { OpportunityItem, VerificationReport } from '../types';
-import { VerificationStatusTag } from '../components/ui/Common';
+import { Reveal, VerificationStatusTag } from '../components/ui/Common';
+import evidenceAuditImage from '../assets/images/feature_evidence_audit_1794640632183.jpg';
 
 interface PublicStats {
   verifiedOpportunities: number;
@@ -35,7 +36,6 @@ export function LandingPage({ navigate }: { navigate: (path: string) => void }) 
   const [sampleReport, setSampleReport] = useState<VerificationReport | null>(null);
   const [featuredOpps, setFeaturedOpps] = useState<OpportunityItem[]>([]);
   const [quickUrl, setQuickUrl] = useState('');
-  const [heroImgFailed, setHeroImgFailed] = useState(false);
   const [auditImgFailed, setAuditImgFailed] = useState(false);
 
   useEffect(() => {
@@ -60,93 +60,119 @@ export function LandingPage({ navigate }: { navigate: (path: string) => void }) 
   };
 
   return (
-    <div className="bg-[#F7F7F0] dark:bg-[#0C110E]">
-      {/* Editorial Hero */}
-      <section className="mx-auto max-w-7xl px-4 pt-12 pb-16 sm:px-6 lg:px-8 lg:pt-16">
-        <div className="grid grid-cols-1 items-stretch gap-10 lg:grid-cols-12">
-          <div className="flex flex-col justify-between lg:col-span-6">
-            <div>
-              <p className="font-mono text-xs font-semibold tracking-wider text-[#5E6B5B] uppercase dark:text-[#C5F36A]">
-                Evidence Intelligence · Student Protection
-              </p>
-              <h1
-                className="mt-4 font-display text-4xl font-extrabold tracking-tight text-[#101713] sm:text-5xl lg:text-[52px] lg:leading-[1.06] dark:text-[#F7F7F0]"
-                style={{ textWrap: 'balance' }}
-              >
-                {stats?.announcement?.headline || 'Your Future Deserves Verified Opportunities.'}
-              </h1>
-              <p className="mt-5 max-w-xl text-base leading-relaxed text-[#455044] dark:text-[#A9B5A6]">
-                {stats?.announcement?.subheadline ||
-                  'Discover scholarships, fellowships, internships and global opportunities with AI-powered verification, personalized eligibility intelligence, and transparent evidence.'}
-              </p>
+    <div className="pp-public-canvas">
+      <section className="mx-auto max-w-7xl px-4 pb-14 pt-12 sm:px-6 lg:px-8 lg:pb-16 lg:pt-20">
+        <div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-12 lg:gap-12">
+          <Reveal className="lg:col-span-6">
+            <p className="inline-flex items-center gap-2 rounded-full border border-[#D7DDD0] bg-white/70 px-3 py-1.5 font-mono text-[10px] font-semibold tracking-[0.14em] text-[#455044] uppercase shadow-sm dark:border-[#344339] dark:bg-[#141B17]/70 dark:text-[#C5F36A]">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#8CB34F]" aria-hidden="true" />
+              Evidence intelligence · Student protection
+            </p>
+            <h1
+              className="mt-6 max-w-2xl font-display text-[clamp(2.75rem,5.2vw,4.65rem)] font-extrabold leading-[0.99] tracking-[-0.055em] text-[#101713] dark:text-[#F7F7F0]"
+              style={{ textWrap: 'balance' }}
+            >
+              Your next step deserves <span className="text-[#668A38] dark:text-[#C5F36A]">proof.</span>
+            </h1>
+            <p className="mt-6 max-w-xl text-base leading-7 text-[#455044] dark:text-[#A9B5A6] sm:text-lg">
+              Find scholarships and global opportunities, check the claims against their sources, and turn the ones that fit into a clear application plan.
+            </p>
 
-              {/* Interactive Product Quick-Verify Bar */}
-              <form
-                onSubmit={handleQuickVerify}
-                className="mt-8 flex flex-col gap-2 rounded-xl border border-[#D7DDD0] bg-white p-2 sm:flex-row sm:items-center dark:border-[#232D27] dark:bg-[#141B17]"
+            <form
+              onSubmit={handleQuickVerify}
+              className="pp-card mt-8 flex flex-col gap-2 rounded-2xl border border-[#D7DDD0] bg-white p-2 shadow-[0_10px_35px_rgba(16,23,19,0.06)] sm:flex-row sm:items-center dark:border-[#344339] dark:bg-[#141B17]"
+            >
+              <input
+                type="url"
+                value={quickUrl}
+                onChange={(e) => setQuickUrl(e.target.value)}
+                placeholder="Paste a scholarship or internship URL"
+                aria-label="Opportunity URL to verify"
+                className="h-12 min-w-0 flex-1 rounded-xl bg-transparent px-4 text-sm text-[#101713] placeholder:text-[#71806E] focus:outline-none dark:text-[#F7F7F0] dark:placeholder:text-[#8C9A88]"
+              />
+              <button
+                type="submit"
+                className="group inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-[#101713] px-5 text-sm font-semibold text-[#C5F36A] transition-all duration-200 hover:bg-[#263329] focus-visible:outline-offset-2 whitespace-nowrap shrink-0 dark:bg-[#C5F36A] dark:text-[#101713] dark:hover:bg-[#b5e458]"
               >
-                <input
-                  type="url"
-                  value={quickUrl}
-                  onChange={(e) => setQuickUrl(e.target.value)}
-                  placeholder="Paste any scholarship or internship URL to inspect..."
-                  aria-label="Opportunity URL to verify"
-                  className="h-11 flex-1 rounded-lg bg-transparent px-3 text-sm text-[#101713] placeholder:text-[#8C9A88] focus:outline-none dark:text-[#F7F7F0]"
-                />
-                <button
-                  type="submit"
-                  className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#101713] px-5 text-sm font-semibold text-[#C5F36A] transition-colors hover:bg-[#1D2520] whitespace-nowrap shrink-0 dark:bg-[#C5F36A] dark:text-[#101713] dark:hover:bg-[#b5e458]"
-                >
-                  <span>Verify Opportunity</span>
-                  <ArrowRight className="h-4 w-4" />
-                </button>
-              </form>
+                <span>Check an opportunity</span>
+                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+              </button>
+            </form>
 
-              <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-[#5E6B5B] dark:text-[#8C9A88]">
-                <span>Audits live URLs, announcements, PDFs &amp; posters</span>
-                <span aria-hidden="true">·</span>
-                <button
-                  type="button"
-                  onClick={() => navigate('/opportunities')}
-                  className="font-semibold text-[#101713] underline decoration-[#C5F36A] decoration-2 underline-offset-4 dark:text-[#C5F36A]"
-                >
-                  Explore Verified Directory
-                </button>
-              </div>
+            <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-[#5E6B5B] dark:text-[#8C9A88]">
+              <span className="inline-flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5 text-[#668A38] dark:text-[#C5F36A]" aria-hidden="true" /> URLs, announcements and documents</span>
+              <button
+                type="button"
+                onClick={() => navigate('/opportunities')}
+                className="font-semibold text-[#101713] underline decoration-[#8CB34F] decoration-2 underline-offset-4 hover:text-[#668A38] dark:text-[#C5F36A]"
+              >
+                Explore the opportunity directory
+              </button>
             </div>
-          </div>
+          </Reveal>
 
-          <div className="lg:col-span-6">
-            <div className="relative h-full min-h-[340px] overflow-hidden rounded-2xl border border-[#E4E8E0] bg-[#101713] dark:border-[#232D27]">
-              {!heroImgFailed ? (
-                <img
-                  src="/src/assets/images/hero_verification_platform_1794640632313.jpg"
-                  alt="University students reviewing verified international scholarship dossiers"
-                  referrerPolicy="no-referrer"
-                  onError={() => setHeroImgFailed(true)}
-                  className="h-full w-full object-cover opacity-85"
-                />
-              ) : (
-                <div className="flex h-full items-center justify-center bg-[#1D2520] p-8 text-[#C5F36A]">
-                  <ShieldCheck className="h-14 w-14" />
+          <Reveal className="lg:col-span-6" delay={120}>
+            <div className="pp-proof-visual">
+              <div className="pp-proof-grid" aria-hidden="true" />
+              <div className="pp-proof-orbit" aria-hidden="true" />
+              <div className="absolute inset-x-5 top-5 flex items-center justify-between gap-3 sm:inset-x-7 sm:top-7">
+                <span className="font-mono text-[10px] font-semibold tracking-[0.13em] text-[#B8C5B6] uppercase">ProofPath · evidence trace</span>
+                <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 font-mono text-[9px] tracking-wider text-[#D5DDD2] uppercase">
+                  <span className="pp-proof-pulse h-1.5 w-1.5 rounded-full bg-[#C5F36A]" aria-hidden="true" />
+                  {sampleReport ? 'Public audit sample' : 'Workflow preview'}
+                </span>
+              </div>
+
+              <div className="pp-proof-node absolute left-5 right-10 top-[82px] z-10 p-4 sm:left-8 sm:right-16 sm:top-[92px] sm:p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 gap-3">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#C5F36A]/15 font-mono text-xs font-bold text-[#C5F36A]">01</span>
+                    <div className="min-w-0">
+                      <p className="font-mono text-[9px] font-semibold tracking-[0.14em] text-[#A9B5A6] uppercase">Claim under review</p>
+                      <p className="mt-1 line-clamp-2 text-sm font-semibold leading-5 text-[#F7F7F0]">
+                        {sampleReport?.claims[0]?.claim || 'Funding, fees, deadline and eligibility details'}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#C5F36A]" aria-hidden="true" />
                 </div>
-              )}
-              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#101713] via-[#101713]/80 to-transparent p-6 text-[#F7F7F0]">
-                <p className="font-mono text-[11px] font-semibold tracking-wider text-[#C5F36A] uppercase">
-                  Primary-Source Audit Standard
-                </p>
-                <p className="mt-1.5 text-sm leading-relaxed text-[#F7F7F0]">
-                  {stats?.announcement?.trustBanner ||
-                    'Zero fabricated evidence. Every verdict cites inspected sources and states confidence limits.'}
-                </p>
+              </div>
+
+              <div className="absolute left-12 top-[169px] z-0 h-12 border-l border-dashed border-[#C5F36A]/50 sm:left-16 sm:top-[180px]" aria-hidden="true" />
+
+              <div className="pp-proof-node absolute left-10 right-5 top-[205px] z-10 p-4 sm:left-16 sm:right-8 sm:top-[218px] sm:p-5">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#C5F36A]/30 bg-[#C5F36A]/10 text-[#C5F36A]">
+                    <ExternalLink className="h-4 w-4" aria-hidden="true" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="font-mono text-[9px] font-semibold tracking-[0.14em] text-[#A9B5A6] uppercase">Source trail</p>
+                    <p className="mt-1 truncate text-sm font-semibold text-[#F7F7F0]">
+                      {sampleReport?.evidenceSources[0]?.sourceTitle || 'Official and supporting sources'}
+                    </p>
+                  </div>
+                  <span className="ml-auto shrink-0 rounded-md border border-white/10 px-2 py-1 font-mono text-[9px] text-[#A9B5A6]">LINKED</span>
+                </div>
+              </div>
+
+              <div className="pp-proof-verdict absolute bottom-5 left-5 right-5 z-10 flex items-center justify-between gap-4 p-4 sm:bottom-7 sm:left-8 sm:right-8 sm:p-5">
+                <div className="min-w-0">
+                  <p className="font-mono text-[9px] font-semibold tracking-[0.14em] text-[#C5F36A] uppercase">Evidence-led outcome</p>
+                  <p className="mt-1 text-sm font-semibold text-[#F7F7F0]">Confidence follows the source.</p>
+                </div>
+                {sampleReport ? (
+                  <VerificationStatusTag status={sampleReport.overallStatus} />
+                ) : (
+                  <span className="rounded-lg border border-[#C5F36A]/35 bg-[#C5F36A]/10 px-2.5 py-1.5 font-mono text-[9px] font-semibold tracking-wider text-[#C5F36A] uppercase">No claim assumed</span>
+                )}
               </div>
             </div>
-          </div>
+          </Reveal>
         </div>
 
-        {/* Real Database Telemetry Strip */}
-        <div className="mt-10 grid grid-cols-2 gap-6 rounded-xl border border-[#E4E8E0] bg-white p-6 sm:grid-cols-4 dark:border-[#232D27] dark:bg-[#141B17]">
-          <div>
+        <Reveal className="mt-12" delay={80}>
+        <div className="grid grid-cols-2 gap-0 overflow-hidden rounded-2xl border border-[#D7DDD0] bg-white/80 shadow-sm backdrop-blur sm:grid-cols-4 dark:border-[#344339] dark:bg-[#141B17]/80">
+          <div className="border-b border-r border-[#E4E8E0] p-4 sm:border-b-0 sm:p-5 dark:border-[#232D27]">
             <p className="font-mono text-3xl font-bold text-[#101713] tabular-nums dark:text-[#C5F36A]">
               {stats ? stats.verifiedOpportunities : '—'}
             </p>
@@ -154,7 +180,7 @@ export function LandingPage({ navigate }: { navigate: (path: string) => void }) 
               Verified Directory Programs
             </p>
           </div>
-          <div>
+          <div className="border-b border-[#E4E8E0] p-4 sm:border-b-0 sm:border-r sm:p-5 dark:border-[#232D27]">
             <p className="font-mono text-3xl font-bold text-[#101713] tabular-nums dark:text-[#F7F7F0]">
               {stats ? stats.verificationReports : '—'}
             </p>
@@ -162,32 +188,33 @@ export function LandingPage({ navigate }: { navigate: (path: string) => void }) 
               Evidence Audits Logged
             </p>
           </div>
-          <div>
+          <div className="border-r border-[#E4E8E0] p-4 sm:p-5 dark:border-[#232D27]">
             <p className="font-mono text-3xl font-bold text-[#101713] tabular-nums dark:text-[#F7F7F0]">
               {stats ? stats.countriesCovered : '—'}
             </p>
             <p className="mt-1 text-xs text-[#5E6B5B] dark:text-[#8C9A88]">
-              Destination Regions Indexed
+              Countries Covered
             </p>
           </div>
-          <div>
+          <div className="p-4 sm:p-5">
             <p className="font-mono text-3xl font-bold text-[#101713] tabular-nums dark:text-[#F7F7F0]">
               6
             </p>
             <p className="mt-1 text-xs text-[#5E6B5B] dark:text-[#8C9A88]">
-              Explicit Verdict Tiers
+              Outcome categories
             </p>
           </div>
         </div>
+        </Reveal>
       </section>
 
       {/* Live Verification Evidence Preview (Real DB Record) */}
       <section className="border-t border-[#E4E8E0] bg-[#101713] py-16 text-[#F7F7F0] dark:border-[#232D27]">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 gap-10 lg:grid-cols-12 lg:items-center">
+          <Reveal className="grid grid-cols-1 gap-10 lg:grid-cols-12 lg:items-center">
             <div className="lg:col-span-5">
               <p className="font-mono text-xs font-semibold tracking-wider text-[#C5F36A] uppercase">
-                Live Evidence Inspection
+                {sampleReport ? 'Public evidence report' : 'Evidence inspection'}
               </p>
               <h2 className="mt-3 font-display text-3xl font-bold tracking-tight">
                 Claims separated. Sources linked. Risks exposed.
@@ -266,7 +293,7 @@ export function LandingPage({ navigate }: { navigate: (path: string) => void }) 
                 )}
               </div>
             </div>
-          </div>
+          </Reveal>
         </div>
       </section>
 
@@ -275,10 +302,10 @@ export function LandingPage({ navigate }: { navigate: (path: string) => void }) 
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
           <div>
             <p className="font-mono text-xs font-semibold tracking-wider text-[#5E6B5B] uppercase dark:text-[#C5F36A]">
-              Audited Catalog Preview
+              Opportunity directory preview
             </p>
             <h2 className="mt-2 font-display text-3xl font-bold tracking-tight text-[#101713] dark:text-[#F7F7F0]">
-              Verified Opportunities Ready for Match Analysis
+              Explore current opportunities
             </h2>
           </div>
           <button
@@ -291,11 +318,12 @@ export function LandingPage({ navigate }: { navigate: (path: string) => void }) 
           </button>
         </div>
 
-        <div className="mt-8 grid grid-cols-1 gap-6 md:grid-cols-3">
+        {featuredOpps.length > 0 ? (
+        <Reveal className="mt-8 grid grid-cols-1 gap-6 md:grid-cols-3">
           {featuredOpps.map((opp) => (
             <article
               key={opp.id}
-              className="flex flex-col justify-between rounded-xl border border-[#E4E8E0] bg-white p-6 transition-colors hover:border-[#101713] dark:border-[#232D27] dark:bg-[#141B17] dark:hover:border-[#C5F36A]"
+              className="pp-card flex flex-col justify-between rounded-xl border border-[#E4E8E0] bg-white p-6 dark:border-[#232D27] dark:bg-[#141B17]"
             >
               <div>
                 <div className="flex items-center justify-between gap-2 text-xs text-[#5E6B5B] dark:text-[#8C9A88]">
@@ -331,7 +359,12 @@ export function LandingPage({ navigate }: { navigate: (path: string) => void }) 
               </div>
             </article>
           ))}
-        </div>
+        </Reveal>
+        ) : (
+          <p className="mt-8 rounded-2xl border border-dashed border-[#CFD7C9] bg-white/60 px-6 py-10 text-center text-sm text-[#5E6B5B] dark:border-[#2C3730] dark:bg-[#141B17]/60 dark:text-[#A9B5A6]" role="status">
+            No reviewed opportunities are available in the directory yet.
+          </p>
+        )}
       </section>
 
       {/* Core Capabilities Editorial Bento */}
@@ -346,8 +379,8 @@ export function LandingPage({ navigate }: { navigate: (path: string) => void }) 
             </p>
           </div>
 
-          <div className="mt-10 grid grid-cols-1 gap-6 lg:grid-cols-12">
-            <div className="rounded-xl border border-[#E4E8E0] bg-[#F7F7F0] p-6 lg:col-span-7 dark:border-[#232D27] dark:bg-[#0C110E]">
+          <Reveal className="mt-10 grid grid-cols-1 gap-6 lg:grid-cols-12">
+            <div className="pp-card rounded-xl border border-[#E4E8E0] bg-[#F7F7F0] p-6 lg:col-span-7 dark:border-[#232D27] dark:bg-[#0C110E]">
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <div className="flex flex-col justify-between">
                   <div>
@@ -372,9 +405,8 @@ export function LandingPage({ navigate }: { navigate: (path: string) => void }) 
                 <div className="overflow-hidden rounded-lg border border-[#E4E8E0] dark:border-[#232D27]">
                   {!auditImgFailed ? (
                     <img
-                      src="/src/assets/images/feature_evidence_audit_1794640632183.jpg"
+                      src={evidenceAuditImage}
                       alt="Scholarship dossier and academic verification workflow"
-                      referrerPolicy="no-referrer"
                       onError={() => setAuditImgFailed(true)}
                       className="h-52 w-full object-cover"
                     />
@@ -388,7 +420,7 @@ export function LandingPage({ navigate }: { navigate: (path: string) => void }) 
             </div>
 
             <div className="space-y-6 lg:col-span-5">
-              <div className="rounded-xl border border-[#E4E8E0] bg-[#F7F7F0] p-6 dark:border-[#232D27] dark:bg-[#0C110E]">
+              <div className="pp-card rounded-xl border border-[#E4E8E0] bg-[#F7F7F0] p-6 dark:border-[#232D27] dark:bg-[#0C110E]">
                 <UserCheck className="h-5 w-5 text-[#101713] dark:text-[#C5F36A]" />
                 <h3 className="mt-3 font-display text-base font-bold text-[#101713] dark:text-[#F7F7F0]">
                   02. Opportunity Intelligence Score
@@ -397,7 +429,7 @@ export function LandingPage({ navigate }: { navigate: (path: string) => void }) 
                   Transparent 0–100 readiness index combining profile completeness, match coverage, checklists, and safety hygiene.
                 </p>
               </div>
-              <div className="rounded-xl border border-[#E4E8E0] bg-[#F7F7F0] p-6 dark:border-[#232D27] dark:bg-[#0C110E]">
+              <div className="pp-card rounded-xl border border-[#E4E8E0] bg-[#F7F7F0] p-6 dark:border-[#232D27] dark:bg-[#0C110E]">
                 <Bot className="h-5 w-5 text-[#101713] dark:text-[#C5F36A]" />
                 <h3 className="mt-3 font-display text-base font-bold text-[#101713] dark:text-[#F7F7F0]">
                   03. Bilingual Advisor (English &amp; বাংলা)
@@ -407,10 +439,10 @@ export function LandingPage({ navigate }: { navigate: (path: string) => void }) 
                 </p>
               </div>
             </div>
-          </div>
+          </Reveal>
 
-          <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-3">
-            <div className="rounded-xl border border-[#E4E8E0] bg-white p-6 dark:border-[#232D27] dark:bg-[#0C110E]">
+          <Reveal className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-3" delay={80}>
+            <div className="pp-card rounded-xl border border-[#E4E8E0] bg-white p-6 dark:border-[#232D27] dark:bg-[#0C110E]">
               <Compass className="h-5 w-5 text-[#101713] dark:text-[#C5F36A]" />
               <h3 className="mt-3 font-display text-base font-bold text-[#101713] dark:text-[#F7F7F0]">
                 04. Opportunity Match Intelligence
@@ -419,7 +451,7 @@ export function LandingPage({ navigate }: { navigate: (path: string) => void }) 
                 Every opportunity displays eligibility fit, funding alignment, academic cutoff checks, and missing criteria.
               </p>
             </div>
-            <div className="rounded-xl border border-[#E4E8E0] bg-white p-6 dark:border-[#232D27] dark:bg-[#0C110E]">
+            <div className="pp-card rounded-xl border border-[#E4E8E0] bg-white p-6 dark:border-[#232D27] dark:bg-[#0C110E]">
               <GitCompareArrows className="h-5 w-5 text-[#101713] dark:text-[#C5F36A]" />
               <h3 className="mt-3 font-display text-base font-bold text-[#101713] dark:text-[#F7F7F0]">
                 05. Opportunity Trust Profiles
@@ -428,7 +460,7 @@ export function LandingPage({ navigate }: { navigate: (path: string) => void }) 
                 Inspect domain classifications, organization identity, historical audits, and community safety flags.
               </p>
             </div>
-            <div className="rounded-xl border border-[#E4E8E0] bg-white p-6 dark:border-[#232D27] dark:bg-[#0C110E]">
+            <div className="pp-card rounded-xl border border-[#E4E8E0] bg-white p-6 dark:border-[#232D27] dark:bg-[#0C110E]">
               <Kanban className="h-5 w-5 text-[#101713] dark:text-[#C5F36A]" />
               <h3 className="mt-3 font-display text-base font-bold text-[#101713] dark:text-[#F7F7F0]">
                 06. Application Readiness Checklist
@@ -437,7 +469,7 @@ export function LandingPage({ navigate }: { navigate: (path: string) => void }) 
                 Track stage workflows across Kanban, List, and Calendar grids with missing document indicators.
               </p>
             </div>
-          </div>
+          </Reveal>
         </div>
       </section>
 
@@ -461,7 +493,7 @@ export function LandingPage({ navigate }: { navigate: (path: string) => void }) 
           </button>
         </div>
 
-        <div className="mt-8 grid grid-cols-1 gap-6 md:grid-cols-3">
+        <Reveal className="mt-8 grid grid-cols-1 gap-6 md:grid-cols-3">
           {[
             {
               step: 'STAGE 01',
@@ -481,7 +513,7 @@ export function LandingPage({ navigate }: { navigate: (path: string) => void }) 
           ].map((item) => (
             <div
               key={item.step}
-              className="rounded-xl border border-[#E4E8E0] bg-white p-6 dark:border-[#232D27] dark:bg-[#141B17]"
+              className="pp-card rounded-xl border border-[#E4E8E0] bg-white p-6 dark:border-[#232D27] dark:bg-[#141B17]"
             >
               <p className="font-mono text-xs font-semibold text-[#5E6B5B] dark:text-[#C5F36A]">
                 {item.step}
@@ -494,7 +526,7 @@ export function LandingPage({ navigate }: { navigate: (path: string) => void }) 
               </p>
             </div>
           ))}
-        </div>
+        </Reveal>
       </section>
 
       {/* Final CTA */}
@@ -657,7 +689,7 @@ export function PricingPage({ navigate }: { navigate: (path: string) => void }) 
       audience: 'For individual students',
       name: 'Student Core',
       price: '$0',
-      cadence: 'Free forever',
+      cadence: 'Free access · No subscription',
       features: [
         'Public URL, text & document verification workspace',
         'Evidence Relationship Explorer & PDF export',
@@ -671,17 +703,16 @@ export function PricingPage({ navigate }: { navigate: (path: string) => void }) 
     },
     {
       audience: 'For university advising teams',
-      name: 'Institutional Pro',
-      price: '$49',
-      cadence: 'per advisor seat / month',
+      name: 'Institutional pilot',
+      price: 'By request',
+      cadence: 'No self-serve billing',
       features: [
-        'Elevated verification & AI advisor rate limits',
-        'Shared moderation & scam-alert review queue',
-        'Custom opportunity catalog publishing (CMS)',
-        'AI usage & security audit logs',
-        'Dedicated onboarding & compliance reporting',
+        'Role-protected moderation and operations console',
+        'Opportunity publishing and content workflows',
+        'Trust & Safety and AI usage views for authorized staff',
+        'Discuss a pilot; organization-specific workspaces are not enabled yet',
       ],
-      cta: 'Contact Institutional Sales',
+      cta: 'Discuss an institutional pilot',
       action: () => navigate('/contact'),
       highlight: true,
     },
@@ -691,10 +722,10 @@ export function PricingPage({ navigate }: { navigate: (path: string) => void }) 
     <div className="mx-auto max-w-5xl px-4 py-14 sm:px-6 lg:px-8">
       <div className="text-center">
         <h1 className="font-display text-3xl font-bold text-[#101713] sm:text-4xl dark:text-[#F7F7F0]">
-          Transparent Pricing
+          Student access is free. Institutional pilots are scoped together.
         </h1>
         <p className="mt-3 text-base text-[#5E6B5B] dark:text-[#8C9A88]">
-          Core student safety and opportunity verification remain free. Institutions fund high-volume advising workflows.
+          Student verification and opportunity planning are available without a subscription. Contact us to discuss current institution workflows; self-service seat billing is not enabled.
         </p>
       </div>
 
@@ -713,8 +744,8 @@ export function PricingPage({ navigate }: { navigate: (path: string) => void }) 
                 {p.audience}
               </p>
               <h2 className="mt-1 font-display text-2xl font-bold">{p.name}</h2>
-              <div className="mt-4 flex items-baseline gap-2">
-                <span className="font-mono text-4xl font-bold tabular-nums">{p.price}</span>
+              <div className="mt-4 flex flex-wrap items-baseline gap-2">
+                <span className={`font-mono font-bold ${p.price === 'By request' ? 'text-2xl' : 'text-4xl tabular-nums'}`}>{p.price}</span>
                 <span className={`text-sm ${p.highlight ? 'text-[#A9B5A6]' : 'text-[#5E6B5B] dark:text-[#8C9A88]'}`}>
                   {p.cadence}
                 </span>
@@ -748,39 +779,41 @@ export function PricingPage({ navigate }: { navigate: (path: string) => void }) 
 }
 
 export function AboutPage() {
+  const principles = [
+    {
+      number: '01',
+      title: 'Every conclusion has a trail',
+      body: 'Verification reports connect individual claims to retrieved sources, so a student can inspect the basis for an outcome.',
+    },
+    {
+      number: '02',
+      title: 'Unknown stays unknown',
+      body: 'Missing profile details and weak evidence remain visible as gaps. They are never quietly counted as a pass.',
+    },
+    {
+      number: '03',
+      title: 'A check is guidance, not a decision',
+      body: 'Eligibility rules help students plan. Admissions offices and program hosts make the final funding and selection decisions.',
+    },
+  ];
+
   return (
     <div className="mx-auto max-w-4xl px-4 py-14 sm:px-6 lg:px-8">
-      <h1 className="font-display text-3xl font-bold text-[#101713] sm:text-4xl dark:text-[#F7F7F0]">
+      <p className="font-mono text-xs font-semibold tracking-[0.14em] text-[#668A38] uppercase dark:text-[#C5F36A]">A clearer path through opportunity</p>
+      <h1 className="mt-3 font-display text-4xl font-bold tracking-tight text-[#101713] sm:text-5xl dark:text-[#F7F7F0]">
         About ProofPath AI
       </h1>
-      <p className="mt-4 text-base leading-relaxed text-[#455044] dark:text-[#A9B5A6]">
+      <p className="mt-5 max-w-3xl text-base leading-relaxed text-[#455044] dark:text-[#A9B5A6]">
         International students navigate thousands of scholarship announcements, internship offers, and study-abroad portals every year—alongside growing impersonation scams and misleading fee-charging intermediaries. ProofPath AI was engineered to give every student and academic advisor an auditable, evidence-first verification workflow.
       </p>
-      <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2">
-        <div className="flex items-center gap-4 rounded-xl border border-[#E4E8E0] bg-white p-5 dark:border-[#232D27] dark:bg-[#141B17]">
-          <img
-            src="/src/assets/images/avatar_student_lead_1794640632225.jpg"
-            alt="Student Research Lead"
-            referrerPolicy="no-referrer"
-            className="h-14 w-14 rounded-lg object-cover"
-          />
-          <div>
-            <p className="font-display text-sm font-bold text-[#101713] dark:text-[#F7F7F0]">Amina Rahman</p>
-            <p className="text-xs text-[#5E6B5B] dark:text-[#8C9A88]">Student Advocacy &amp; Bilingual Access</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-4 rounded-xl border border-[#E4E8E0] bg-white p-5 dark:border-[#232D27] dark:bg-[#141B17]">
-          <img
-            src="/src/assets/images/avatar_admin_analyst_1794640633226.jpg"
-            alt="Verification Compliance Lead"
-            referrerPolicy="no-referrer"
-            className="h-14 w-14 rounded-lg object-cover"
-          />
-          <div>
-            <p className="font-display text-sm font-bold text-[#101713] dark:text-[#F7F7F0]">Elena Vance</p>
-            <p className="text-xs text-[#5E6B5B] dark:text-[#8C9A88]">Trust &amp; Verification Standards</p>
-          </div>
-        </div>
+      <div className="mt-10 grid grid-cols-1 gap-4 md:grid-cols-3">
+        {principles.map((principle) => (
+          <article key={principle.number} className="pp-card rounded-2xl border border-[#E4E8E0] bg-white p-5 dark:border-[#232D27] dark:bg-[#141B17]">
+            <p className="font-mono text-xs font-semibold tracking-wider text-[#668A38] dark:text-[#C5F36A]">{principle.number}</p>
+            <h2 className="mt-4 font-display text-lg font-bold text-[#101713] dark:text-[#F7F7F0]">{principle.title}</h2>
+            <p className="mt-2 text-sm leading-relaxed text-[#5E6B5B] dark:text-[#A9B5A6]">{principle.body}</p>
+          </article>
+        ))}
       </div>
     </div>
   );

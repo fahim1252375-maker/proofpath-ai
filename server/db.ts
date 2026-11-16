@@ -486,7 +486,9 @@ function seedInitialData(db: Database.Database): void {
   }
 
   const oppCount = (db.prepare('SELECT COUNT(*) as c FROM opportunities').get() as { c: number }).c;
-  if (oppCount === 0) {
+  // The bundled listings and showcase report are demo fixtures, not a live
+  // verification feed. Never publish them from a fresh production database.
+  if (oppCount === 0 && !isProd) {
     const seedOpps = [
       {
         id: 'opp_chevening',
@@ -876,7 +878,7 @@ function seedInitialData(db: Database.Database): void {
         headline: 'Your Future Deserves Verified Opportunities.',
         subheadline:
           'Discover scholarships, fellowships, internships and global opportunities with AI-powered verification, personalized eligibility intelligence, and transparent evidence.',
-        trustBanner: 'Zero fabricated evidence. Every verdict cites inspected sources and states confidence limits.',
+        trustBanner: 'Review source links alongside each result. Missing evidence stays visible.',
       }),
       isProd ? null : 'usr_admin_demo',
       now
