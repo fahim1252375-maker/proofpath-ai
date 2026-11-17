@@ -34,6 +34,30 @@ import { registerIntelligenceRoutes } from './intelligence.ts';
 import { scoreSourceCredibility } from './source-credibility.ts';
 import type { SafeUser, StudentProfile, UserRecord, UserRole, VerificationReportDTO } from './types.ts';
 
+/**
+ * Whether a user-triggered in-app notification of this type should be created.
+ * Reads the user's notification_preferences row; a missing row means enabled.
+ * Deadline inserts are gated by the deadline sweep's own in_app_deadlines
+ * check and monitoring inserts by watchlist_preferences — not by this helper.
+ */
+const NOTIFICATION_PREF_COLUMN: Record<'verification' | 'application' | 'security', string> = {
+  verification: 'in_app_verifications',
+  application: 'in_app_applications',
+  security: 'in_app_security',
+};
+
+function shouldNotify(
+  db: Database.Database,
+  userId: string,
+  type: 'verification' | 'application' | 'security'
+): boolean {
+  const column = NOTIFICATION_PREF_COLUMN[type];
+  const row = db
+    .prepare(`SELECT ${column} AS enabled FROM notification_preferences WHERE user_id = ?`)
+    .get(userId) as { enabled: number } | undefined;
+  return !row || Number(row.enabled) === 1;
+}
+
 const SESSION_COOKIE_NAME = 'proofpath_session';
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -426,13 +450,15 @@ export function createApp(db: Database.Database) {
       `).run(userId, now);
     })();
 
-    createNotification(db, {
-      userId,
-      type: 'security',
-      title: 'Account Created',
-      message: 'Complete your Student Eligibility Profile to unlock personalized opportunity matching.',
-      link: '/dashboard/eligibility',
-    });
+    if (shouldNotify(db, userId, 'security')) {
+      createNotification(db, {
+        userId,
+        type: 'security',
+        title: 'Account Created',
+        message: 'Complete your Student Eligibility Profile to unlock personalized opportunity matching.',
+        link: '/dashboard/eligibility',
+      });
+    }
 
     writeAuditLog(db, {
       actorUserId: userId,
@@ -605,13 +631,15 @@ export function createApp(db: Database.Database) {
       db.prepare('DELETE FROM sessions WHERE user_id = ?').run(row.user_id);
     })();
 
-    createNotification(db, {
-      userId: row.user_id,
-      type: 'security',
-      title: 'Password Updated',
-      message: 'Your account password was changed and active sessions were refreshed.',
-      link: '/dashboard/eligibility',
-    });
+    if (shouldNotify(db, row.user_id, 'security')) {
+      createNotification(db, {
+        userId: row.user_id,
+        type: 'security',
+        title: 'Password Updated',
+        message: 'Your account password was changed and active sessions were refreshed.',
+        link: '/dashboard/eligibility',
+      });
+    }
 
     res.json({ message: 'Password updated successfully. You may now sign in.' });
   });
@@ -690,13 +718,15 @@ export function createApp(db: Database.Database) {
         ipAddress: req.ip,
         metadata: { revokedOtherSessions: revoked },
       });
-      createNotification(db, {
-        userId: req.authUser!.id,
-        type: 'security',
-        title: 'Password changed',
-        message: 'Your password was updated. Other active sessions were signed out.',
-        link: '/dashboard/settings',
-      });
+      if (shouldNotify(db, req.authUser!.id, 'security')) {
+        createNotification(db, {
+          userId: req.authUser!.id,
+          type: 'security',
+          title: 'Password changed',
+          message: 'Your password was updated. Other active sessions were signed out.',
+          link: '/dashboard/settings',
+        });
+      }
       return revoked;
     })();
 
@@ -1055,7 +1085,7 @@ export function createApp(db: Database.Database) {
         fetchedPage,
       });
 
-      if (req.authUser) {
+      if (req.authUser && shouldNotify(db, req.authUser.id, 'verification')) {
         createNotification(db, {
           userId: req.authUser.id,
           type: 'verification',
@@ -1109,7 +1139,7 @@ export function createApp(db: Database.Database) {
         submittedUrl: safeRefUrl,
       });
 
-      if (req.authUser) {
+      if (req.authUser && shouldNotify(db, req.authUser.id, 'verification')) {
         createNotification(db, {
           userId: req.authUser.id,
           type: 'verification',
@@ -1165,7 +1195,7 @@ export function createApp(db: Database.Database) {
           submittedText: req.body?.notes ? sanitizeText(String(req.body.notes), 2000) : undefined,
         });
 
-        if (req.authUser) {
+        if (req.authUser && shouldNotify(db, req.authUser.id, 'verification')) {
           createNotification(db, {
             userId: req.authUser.id,
             type: 'verification',
@@ -1351,13 +1381,15 @@ export function createApp(db: Database.Database) {
       now
     );
 
-    createNotification(db, {
-      userId: req.authUser!.id,
-      type: 'application',
-      title: 'Application Added',
-      message: `${parsed.data.customTitle} added to your tracker (Deadline: ${parsed.data.deadline}).`,
-      link: '/dashboard/applications',
-    });
+    if (shouldNotify(db, req.authUser!.id, 'application')) {
+      createNotification(db, {
+        userId: req.authUser!.id,
+        type: 'application',
+        title: 'Application Added',
+        message: `${parsed.data.customTitle} added to your tracker (Deadline: ${parsed.data.deadline}).`,
+        link: '/dashboard/applications',
+      });
+    }
 
     res.status(201).json({ id });
   });
@@ -1397,13 +1429,15 @@ export function createApp(db: Database.Database) {
         timestamp: now,
         action: `Moved from ${existing.status} to ${parsed.data.status}`,
       });
-      createNotification(db, {
-        userId: req.authUser!.id,
-        type: 'application',
-        title: 'Application Status Updated',
-        message: `${existing.custom_title} moved to ${parsed.data.status}.`,
-        link: '/dashboard/applications',
-      });
+      if (shouldNotify(db, req.authUser!.id, 'application')) {
+        createNotification(db, {
+          userId: req.authUser!.id,
+          type: 'application',
+          title: 'Application Status Updated',
+          message: `${existing.custom_title} moved to ${parsed.data.status}.`,
+          link: '/dashboard/applications',
+        });
+      }
     } else if (parsed.data.checklist) {
       const done = parsed.data.checklist.filter((c) => c.done).length;
       activity.unshift({

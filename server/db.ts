@@ -508,19 +508,6 @@ function seedInitialData(db: Database.Database): void {
     insertPref.run(studentId, now);
     insertPref.run(modId, now);
     insertPref.run(adminId, now);
-
-    db.prepare(`
-      INSERT INTO notifications (id, user_id, type, title, message, link, is_read, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, 0, ?)
-    `).run(
-      'notif_welcome_1',
-      studentId,
-      'verification',
-      'Welcome to ProofPath AI',
-      'Your student profile is ready. Review opportunity details and confirm current information with the provider before applying.',
-      '/verify',
-      now
-    );
   }
 
   const contentCount = (db.prepare('SELECT COUNT(*) as c FROM site_content').get() as { c: number }).c;
