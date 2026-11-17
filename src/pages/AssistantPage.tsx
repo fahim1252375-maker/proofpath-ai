@@ -6,6 +6,102 @@ import { useAuth } from '../context/AuthContext';
 import type { AssistantMessage, ConversationItem } from '../types';
 import { EmptyState, SkeletonBlock } from '../components/ui/Common';
 
+/**
+ * Copilot availability states, derived only from the server's own
+ * fallbackReason (Guided Mode is never described as Gemini output).
+ */
+export type AssistantFallbackKind =
+  | 'quota_exhausted'
+  | 'provider_off'
+  | 'consent_required'
+  | 'outdated_consent'
+  | 'provider_unavailable';
+
+export interface AssistantFallbackNotice {
+  kind: AssistantFallbackKind;
+  title: string;
+  detail: string;
+}
+
+const QUOTA_REASONS = ['user_limit', 'global_limit', 'concurrency_limit'] as const;
+const PROVIDER_OFF_REASONS = [
+  'disabled',
+  'free_tier_unconfirmed',
+  'model_unavailable',
+  'api_key_missing',
+  'global_limit_unconfigured',
+] as const;
+
+export function classifyAssistantFallback(
+  fallbackReason: string | null | undefined,
+  options: { previousConsentAt?: string | null } = {}
+): AssistantFallbackNotice | null {
+  if (!fallbackReason) return null;
+
+  if (fallbackReason === 'consent_required') {
+    if (options.previousConsentAt) {
+      return {
+        kind: 'outdated_consent',
+        title: 'Your earlier Gemini consent is outdated',
+        detail:
+          'ProofPath versions its AI privacy terms, and the consent decision saved on ' +
+          `${options.previousConsentAt.slice(0, 10)} no longer applies to the current version. ` +
+          'Review the “What is sent to Google?” summary and tick the consent box again to re-enable Gemini. ' +
+          'Your question was answered locally in Guided Mode.',
+      };
+    }
+    return {
+      kind: 'consent_required',
+      title: 'External AI needs your consent',
+      detail:
+        'Gemini stayed off because external processing is not consented for your account. ' +
+        'Guided Mode answered locally using your ProofPath data. Tick the consent box in the privacy panel above if you want Gemini Free responses.',
+    };
+  }
+
+  if ((QUOTA_REASONS as readonly string[]).includes(fallbackReason)) {
+    return {
+      kind: 'quota_exhausted',
+      title: 'Today’s Gemini quota is used up',
+      detail:
+        'Your daily allowance or the site-wide free-tier cap is spent, so Gemini was not called. ' +
+        'Guided Mode answered locally from your ProofPath data and remains fully available. Counters reset at midnight Pacific time.',
+    };
+  }
+
+  if ((PROVIDER_OFF_REASONS as readonly string[]).includes(fallbackReason)) {
+    return {
+      kind: 'provider_off',
+      title: 'Gemini is switched off by the operator',
+      detail:
+        'This deployment has not enabled external AI: the free tier, model, API key, and project cap must all be confirmed by the operator first. ' +
+        'Guided Mode answered locally from your records and is unaffected.',
+    };
+  }
+
+  return {
+    kind: 'provider_unavailable',
+    title: 'Gemini is unavailable right now',
+    detail:
+      fallbackReason === 'provider_rate_limited'
+        ? 'Google rate-limited the request, so no message was sent externally. Guided Mode answered locally; try again after the counter resets at midnight Pacific time.'
+        : 'Gemini could not be reached, so nothing was sent externally. Guided Mode answered locally from your ProofPath data.',
+  };
+}
+
+/**
+ * The availability endpoint keeps the consent contract unchanged: it reports
+ * only the active consent flag and the last decision timestamp. A timestamp
+ * with an inactive flag means a previous decision exists but is no longer
+ * active (outdated version or revoked), which is what the re-consent UX keys on.
+ */
+export function hasInactiveConsentDecision(status: {
+  consent: boolean;
+  consentUpdatedAt: string | null;
+} | null): boolean {
+  return Boolean(status && !status.consent && status.consentUpdatedAt);
+}
+
 export function AssistantPage({
   initialOpportunityId = '',
   initialReportId = '',
@@ -26,11 +122,13 @@ export function AssistantPage({
     availability: string;
     aiReady: boolean;
     consent: boolean;
+    consentUpdatedAt: string | null;
     usedToday: number;
     dailyLimit: number;
     remainingToday: number;
     resetAt: string;
   } | null>(null);
+  const [fallbackNotice, setFallbackNotice] = useState<AssistantFallbackNotice | null>(null);
   const [retryPrompt, setRetryPrompt] = useState('');
   const [sendError, setSendError] = useState('');
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
@@ -106,9 +204,15 @@ export function AssistantPage({
       } : current);
       setRetryPrompt('');
       setSendError('');
+      setFallbackNotice(
+        classifyAssistantFallback(res.fallbackReason, {
+          previousConsentAt: res.fallbackReason === 'consent_required' ? aiStatus?.consentUpdatedAt || null : null,
+        })
+      );
     } catch (err) {
       setRetryPrompt(text);
       setSendError(err instanceof Error ? err.message : 'Unable to reach ProofPath Advisor.');
+      setFallbackNotice(null);
     } finally {
       setSending(false);
     }
@@ -269,6 +373,11 @@ export function AssistantPage({
           />
           <span>Allow my current message, with obvious personal identifiers redacted, to be processed by Google Gemini Free when the site’s free-tier quota is available.</span>
         </label>
+        {hasInactiveConsentDecision(aiStatus) && (
+          <p role="status" className="mt-2 rounded-lg bg-[#C5F36A]/20 px-2.5 py-2 text-[11px] font-medium leading-relaxed text-[#101713] dark:bg-[#C5F36A]/10 dark:text-[#C5F36A]">
+            Your earlier consent (saved {aiStatus?.consentUpdatedAt?.slice(0, 10)}) is outdated: ProofPath versions its AI privacy terms, so the previous approval no longer applies. Review the terms above and tick the box to consent again. Guided Mode stays available either way.
+          </p>
+        )}
       </section>
 
       {(initialOpportunityId || initialReportId) && (
@@ -456,6 +565,24 @@ export function AssistantPage({
             <div role="alert" className="mx-3 mb-2 flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
               <span>{sendError}</span>
               {retryPrompt && <button type="button" onClick={() => handleSend(retryPrompt)} disabled={sending} className="shrink-0 font-semibold underline">Retry</button>}
+            </div>
+          )}
+
+          {fallbackNotice && (
+            <div
+              role="status"
+              aria-live="polite"
+              data-testid="assistant-fallback-notice"
+              className={`mx-3 mb-2 rounded-lg border px-3 py-2 text-xs leading-relaxed ${
+                fallbackNotice.kind === 'quota_exhausted'
+                  ? 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200'
+                  : fallbackNotice.kind === 'outdated_consent'
+                  ? 'border-[#9ECF42] bg-[#C5F36A]/20 text-[#101713] dark:border-[#C5F36A]/50 dark:bg-[#C5F36A]/10 dark:text-[#C5F36A]'
+                  : 'border-[#E4E8E0] bg-[#F7F7F0] text-[#243329] dark:border-[#354139] dark:bg-[#0C110E] dark:text-[#D5DDD2]'
+              }`}
+            >
+              <p className="font-semibold">{fallbackNotice.title}</p>
+              <p className="mt-0.5">{fallbackNotice.detail}</p>
             </div>
           )}
 
