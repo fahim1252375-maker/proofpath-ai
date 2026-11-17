@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { apiRequest } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
+import { buildComparisonRows, normalizeCompareSelection, NOT_PROVIDED } from '../lib/comparisonStudio';
 import type { OpportunityItem, VerificationReport } from '../types';
 import {
   EligibilityStatusTag,
@@ -130,14 +131,27 @@ export function OpportunitiesDirectoryPage({
         </div>
 
         {compareIds.length > 0 && (
-          <button
-            type="button"
-            onClick={() => navigate(`/compare?ids=${compareIds.join(',')}`)}
-            className="inline-flex items-center gap-2 rounded-lg bg-[#101713] px-4 py-2 text-xs font-semibold text-[#C5F36A] hover:bg-[#1D2520] dark:bg-[#C5F36A] dark:text-[#101713] whitespace-nowrap"
-          >
-            <GitCompareArrows className="h-4 w-4" />
-            <span>Compare Selected ({compareIds.length})</span>
-          </button>
+          <div className="flex items-center gap-2 whitespace-nowrap">
+            <button
+              type="button"
+              disabled={compareIds.length < 2}
+              onClick={() => navigate(`/compare?ids=${compareIds.join(',')}`)}
+              title={
+                compareIds.length < 2
+                  ? 'Select at least two opportunities to compare'
+                  : undefined
+              }
+              className="inline-flex items-center gap-2 rounded-lg bg-[#101713] px-4 py-2 text-xs font-semibold text-[#C5F36A] hover:bg-[#1D2520] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#C5F36A] dark:text-[#101713]"
+            >
+              <GitCompareArrows className="h-4 w-4" />
+              <span>Compare Selected ({compareIds.length})</span>
+            </button>
+            {compareIds.length < 2 && (
+              <span className="text-[11px] font-medium text-[#5E6B5B] dark:text-[#8C9A88]">
+                Select at least two opportunities to enable comparison.
+              </span>
+            )}
+          </div>
         )}
       </div>
 
@@ -818,15 +832,12 @@ export function CompareOpportunitiesPage({
     Promise.all([
       idsToFetch.length
         ? apiRequest<{ items: OpportunityItem[] }>(`/api/opportunities/compare?ids=${idsToFetch.join(',')}`)
-        : Promise.resolve({ items: [] }),
+        : Promise.resolve<{ items: OpportunityItem[] }>({ items: [] }),
       apiRequest<{ items: OpportunityItem[] }>('/api/opportunities?limit=20'),
     ])
       .then(([cmp, all]) => {
-        if (cmp.items.length > 0) {
-          setItems(cmp.items);
-        } else {
-          setItems(all.items.slice(0, 3));
-        }
+        // No auto-fill: an empty selection stays empty (owner decision).
+        setItems(cmp.items);
         setAllOptions(all.items);
       })
       .finally(() => setLoading(false));
@@ -841,6 +852,10 @@ export function CompareOpportunitiesPage({
       return [...prev, opp];
     });
   };
+
+  const selection = normalizeCompareSelection(items.map((o) => o.id));
+  const selectionOk = selection.ok;
+  const rows = selectionOk ? buildComparisonRows(items) : [];
 
   return (
     <div className="space-y-6">
@@ -890,11 +905,15 @@ export function CompareOpportunitiesPage({
 
       {loading ? (
         <SkeletonBlock className="h-80 rounded-xl" />
-      ) : items.length === 0 ? (
+      ) : !selectionOk ? (
         <EmptyState
           icon={<GitCompareArrows className="h-5 w-5" />}
-          title="Select opportunities to compare"
-          description="Pick up to four programs above or from the Opportunity Directory."
+          title="Select at least two opportunities to compare"
+          description={
+            items.length === 0
+              ? 'No example records are shown — pick two to four programs above or from the Opportunity Directory.'
+              : `You have selected ${items.length} record(s). One more is needed before the comparison can be built.`
+          }
           action={
             <button
               type="button"
@@ -925,87 +944,47 @@ export function CompareOpportunitiesPage({
               </tr>
             </thead>
             <tbody className="divide-y divide-[#E4E8E0] text-xs dark:divide-[#232D27]">
-              <tr>
-                <td className="px-4 py-3 font-medium text-[#5E6B5B]">Verification</td>
-                {items.map((o) => (
-                  <td key={o.id} className="px-4 py-3">
-                    <VerificationStatusTag status={o.verificationStatus} />
-                  </td>
-                ))}
-              </tr>
-              <tr>
-                <td className="px-4 py-3 font-medium text-[#5E6B5B]">Organization</td>
-                {items.map((o) => (
-                  <td key={o.id} className="px-4 py-3 text-[#101713] dark:text-[#F7F7F0]">{o.organization}</td>
-                ))}
-              </tr>
-              <tr>
-                <td className="px-4 py-3 font-medium text-[#5E6B5B]">Country</td>
-                {items.map((o) => (
-                  <td key={o.id} className="px-4 py-3 text-[#101713] dark:text-[#F7F7F0]">{o.country}</td>
-                ))}
-              </tr>
-              <tr>
-                <td className="px-4 py-3 font-medium text-[#5E6B5B]">Funding Amount</td>
-                {items.map((o) => (
-                  <td key={o.id} className="px-4 py-3 font-semibold text-[#101713] dark:text-[#F7F7F0]">{o.fundingAmount}</td>
-                ))}
-              </tr>
-              <tr>
-                <td className="px-4 py-3 font-medium text-[#5E6B5B]">Education Level</td>
-                {items.map((o) => (
-                  <td key={o.id} className="px-4 py-3 capitalize text-[#101713] dark:text-[#F7F7F0]">
-                    {o.educationLevel.replace('_', ' ')}
-                  </td>
-                ))}
-              </tr>
-              <tr>
-                <td className="px-4 py-3 font-medium text-[#5E6B5B]">Min GPA</td>
-                {items.map((o) => (
-                  <td key={o.id} className="px-4 py-3 font-mono tabular-nums text-[#101713] dark:text-[#F7F7F0]">
-                    {o.minGpa ? `${o.minGpa.toFixed(2)}/4.0` : 'No fixed cutoff'}
-                  </td>
-                ))}
-              </tr>
-              <tr>
-                <td className="px-4 py-3 font-medium text-[#5E6B5B]">English Req</td>
-                {items.map((o) => (
-                  <td key={o.id} className="px-4 py-3 text-[#5E6B5B] dark:text-[#A9B5A6]">{o.englishReq || '—'}</td>
-                ))}
-              </tr>
-              <tr>
-                <td className="px-4 py-3 font-medium text-[#5E6B5B]">Deadline &amp; Urgency</td>
-                {items.map((o) => (
-                  <td key={o.id} className="px-4 py-3 font-mono font-semibold tabular-nums text-[#101713] dark:text-[#F7F7F0]">
-                    {o.deadline}
-                    {o.matchIntelligence && (
-                      <span className="block text-[11px] font-normal text-[#5E6B5B] dark:text-[#C5F36A]">
-                        {o.matchIntelligence.deadlineUrgency}
-                      </span>
-                    )}
-                  </td>
-                ))}
-              </tr>
-              <tr>
-                <td className="px-4 py-3 font-medium text-[#5E6B5B]">Funding Fit</td>
-                {items.map((o) => (
-                  <td key={o.id} className="px-4 py-3 font-mono text-[#101713] dark:text-[#F7F7F0]">
-                    {o.matchIntelligence?.fundingCompatibility || 'Unspecified'}
-                  </td>
-                ))}
-              </tr>
-              <tr>
-                <td className="px-4 py-3 font-medium text-[#5E6B5B]">Your Eligibility</td>
-                {items.map((o) => (
-                  <td key={o.id} className="px-4 py-3">
-                    {o.eligibility ? (
-                      <EligibilityStatusTag status={o.eligibility.status} />
-                    ) : (
-                      <span className="text-[#8C9A88]">Sign in to check</span>
-                    )}
-                  </td>
-                ))}
-              </tr>
+              {rows.map((row) => (
+                <tr key={row.criterion}>
+                  <td className="px-4 py-3 font-medium text-[#5E6B5B]">{row.criterion}</td>
+                  {row.cells.map((cell) => {
+                    const isLink = row.criterion === 'Official source' && cell.value !== NOT_PROVIDED;
+                    const isDate = row.criterion === 'Last verified' && cell.value !== NOT_PROVIDED;
+                    const display = isDate && !Number.isNaN(new Date(cell.value).getTime())
+                      ? new Date(cell.value).toLocaleDateString()
+                      : cell.value;
+                    return (
+                      <td key={cell.recordId} className="px-4 py-3 align-top">
+                        {isLink ? (
+                          <a
+                            href={cell.value}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-semibold text-[#101713] underline decoration-[#C5F36A] decoration-2 dark:text-[#C5F36A]"
+                          >
+                            Open official page
+                            <ExternalLink className="ml-1 inline h-3 w-3" aria-hidden="true" />
+                          </a>
+                        ) : (
+                          <span
+                            className={`text-[#101713] dark:text-[#F7F7F0] ${
+                              cell.value === NOT_PROVIDED ? 'text-[#8C9A88] italic dark:text-[#A9B5A6]' : ''
+                            }`}
+                          >
+                            {display}
+                          </span>
+                        )}
+                        <span
+                          className="mt-0.5 block font-mono text-[9px] text-[#8C9A88] dark:text-[#A9B5A6]"
+                          title={`${cell.source} (record ${cell.recordId})`}
+                        >
+                          {cell.source}
+                        </span>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
