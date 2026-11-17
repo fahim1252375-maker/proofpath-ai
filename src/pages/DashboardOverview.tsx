@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { apiRequest } from '../lib/api';
 import { OpportunityRadarCard } from '../components/dashboard/OpportunityRadarCard';
+import { ReadinessScorecard } from '../components/dashboard/ReadinessScorecard';
 import { useAuth } from '../context/AuthContext';
 import type { OpportunityItem } from '../types';
 import {
@@ -293,6 +294,8 @@ export function DashboardOverview({ navigate }: { navigate: (path: string) => vo
           onTune={() => navigate('/dashboard/eligibility')}
           onExplore={() => navigate('/opportunities')}
         />
+
+        <ReadinessScorecard />
       </div>
 
       {/* KPI Strip */}
