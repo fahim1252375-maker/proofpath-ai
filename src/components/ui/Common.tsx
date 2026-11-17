@@ -11,6 +11,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import type { EligibilityStatus, VerificationStatus } from '../../types';
+import { ELIGIBILITY_STATE_COPY } from '../../lib/eligibilityLabels';
 import { useAuth } from '../../context/AuthContext';
 
 export function VerificationStatusTag({ status }: { status: VerificationStatus }) {
@@ -72,17 +73,17 @@ export function EligibilityStatusTag({ status }: { status: EligibilityStatus }) 
       cls: 'text-[#101713] bg-[#C5F36A]/45 border-[#9ECF42] dark:text-[#C5F36A] dark:bg-[#C5F36A]/10 dark:border-[#C5F36A]/40',
     },
     POTENTIALLY_ELIGIBLE: {
-      label: 'Potentially Eligible',
+      label: ELIGIBILITY_STATE_COPY.POTENTIALLY_ELIGIBLE.label,
       icon: <Info className="h-3.5 w-3.5 shrink-0" />,
       cls: 'text-[#1D2520] bg-[#EBF2E4] border-[#C6D5BC] dark:text-[#D5E6C8] dark:bg-[#1D2520] dark:border-[#344339]',
     },
     NOT_ELIGIBLE: {
-      label: 'Not Eligible',
+      label: ELIGIBILITY_STATE_COPY.NOT_ELIGIBLE.label,
       icon: <XCircle className="h-3.5 w-3.5 shrink-0" />,
       cls: 'text-red-800 bg-red-50 border-red-200 dark:text-red-300 dark:bg-red-950/60 dark:border-red-800',
     },
     MISSING_INFO: {
-      label: 'Missing Info',
+      label: ELIGIBILITY_STATE_COPY.MISSING_INFO.label,
       icon: <HelpCircle className="h-3.5 w-3.5 shrink-0" />,
       cls: 'text-amber-800 bg-amber-50 border-amber-200 dark:text-amber-300 dark:bg-amber-950/60 dark:border-amber-800',
     },

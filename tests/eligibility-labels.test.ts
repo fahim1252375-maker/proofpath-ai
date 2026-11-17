@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
 import {
   ELIGIBILITY_ESTIMATE_NOTICE,
   ELIGIBILITY_STATE_COPY,
@@ -57,5 +59,38 @@ describe('eligibilityStateCopy', () => {
     expect(eligibilityStateCopy('')).toBeNull();
     expect(eligibilityStateCopy(null)).toBeNull();
     expect(eligibilityStateCopy(undefined)).toBeNull();
+  });
+});
+
+describe('shared EligibilityStatusTag stays aligned with eligibilityLabels', () => {
+  const commonSource = fs.readFileSync(
+    path.join(import.meta.dirname, '..', 'src', 'components', 'ui', 'Common.tsx'),
+    'utf8'
+  );
+
+  function tagSection(source: string): string {
+    const start = source.indexOf('export function EligibilityStatusTag');
+    const next = source.indexOf('export function', start + 10);
+    return source.slice(start, next === -1 ? undefined : next);
+  }
+
+  it('no stale labels remain in EligibilityStatusTag', () => {
+    const section = tagSection(commonSource);
+    expect(section).not.toContain('Potentially Eligible');
+    expect(section).not.toContain("'Missing Info'");
+    expect(section).not.toContain("'Not Eligible'");
+  });
+
+  it('reads its labels from ELIGIBILITY_STATE_COPY via direct record access', () => {
+    const section = tagSection(commonSource);
+    // The three previously stale labels now use direct record access; the
+    // ELIGIBLE entry already had the correct literal, so three lookups is the
+    // exact expected count.
+    const lookups = section.match(/ELIGIBILITY_STATE_COPY\.\w+\.label/g) ?? [];
+    expect(lookups).toHaveLength(3);
+    expect(lookups).toContain('ELIGIBILITY_STATE_COPY.POTENTIALLY_ELIGIBLE.label');
+    expect(lookups).toContain('ELIGIBILITY_STATE_COPY.NOT_ELIGIBLE.label');
+    expect(lookups).toContain('ELIGIBILITY_STATE_COPY.MISSING_INFO.label');
+    expect(section).not.toMatch(/\.label!/); // no non-null assertions
   });
 });
