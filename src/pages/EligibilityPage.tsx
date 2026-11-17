@@ -3,7 +3,13 @@ import { Save } from 'lucide-react';
 import { apiRequest } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import type { OpportunityItem, StudentProfile } from '../types';
-import { EligibilityStatusTag, SkeletonBlock } from '../components/ui/Common';
+import { SkeletonBlock } from '../components/ui/Common';
+import {
+  ELIGIBILITY_ESTIMATE_NOTICE,
+  ELIGIBILITY_STATE_COPY,
+  ELIGIBILITY_STATE_ORDER,
+  eligibilityStateCopy,
+} from '../lib/eligibilityLabels';
 
 export function EligibilityPage({ navigate }: { navigate: (path: string) => void }) {
   const { profile, setProfileState, addToast } = useAuth();
@@ -303,34 +309,39 @@ export function EligibilityPage({ navigate }: { navigate: (path: string) => void
         <div className="space-y-4 lg:col-span-7">
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#E4E8E0] bg-white p-3 dark:border-[#232D27] dark:bg-[#141B17]">
             <div className="flex flex-wrap gap-1">
-              {[
-                { id: 'all', label: 'All' },
-                { id: 'ELIGIBLE', label: 'Eligible' },
-                { id: 'POTENTIALLY_ELIGIBLE', label: 'Potentially Eligible' },
-                { id: 'MISSING_INFO', label: 'Missing Info' },
-                { id: 'NOT_ELIGIBLE', label: 'Not Eligible' },
-              ].map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => setFilterStatus(t.id)}
-                  className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
-                    filterStatus === t.id
-                      ? 'bg-[#101713] text-[#C5F36A] dark:bg-[#C5F36A] dark:text-[#101713]'
-                      : 'text-[#5E6B5B] hover:bg-[#F7F7F0] dark:text-[#A9B5A6] dark:hover:bg-[#1D2520]'
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
+              {ELIGIBILITY_STATE_ORDER.map((status) => {
+                const copy = ELIGIBILITY_STATE_COPY[status];
+                return (
+                  <button
+                    key={status}
+                    type="button"
+                    onClick={() => setFilterStatus(status)}
+                    aria-pressed={filterStatus === status}
+                    title={copy.meaning}
+                    className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                      filterStatus === status
+                        ? 'bg-[#101713] text-[#C5F36A] dark:bg-[#C5F36A] dark:text-[#101713]'
+                        : 'text-[#5E6B5B] hover:bg-[#F7F7F0] dark:text-[#A9B5A6] dark:hover:bg-[#1D2520]'
+                    }`}
+                  >
+                    {copy.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
           {loadingOpps ? (
             <SkeletonBlock className="h-72 rounded-xl" />
+          ) : filteredOpps.length === 0 ? (
+            <div className="rounded-xl border border-[#E4E8E0] bg-white p-6 text-sm text-[#5E6B5B] dark:border-[#232D27] dark:bg-[#141B17] dark:text-[#8C9A88]">
+              No opportunity records match this state. Choose another filter or complete your profile and save to recalculate.
+            </div>
           ) : (
             <div className="space-y-4">
-              {filteredOpps.map((opp) => (
+              {filteredOpps.map((opp) => {
+                const stateCopy = eligibilityStateCopy(opp.eligibility?.status);
+                return (
                 <div
                   key={opp.id}
                   className="rounded-xl border border-[#E4E8E0] bg-white p-5 dark:border-[#232D27] dark:bg-[#141B17]"
@@ -354,8 +365,44 @@ export function EligibilityPage({ navigate }: { navigate: (path: string) => void
                         )}
                       </p>
                     </div>
-                    {opp.eligibility && <EligibilityStatusTag status={opp.eligibility.status} />}
+                    {stateCopy && (
+                      <span
+                        title={stateCopy.meaning}
+                        className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded border px-2 py-0.5 text-[11px] font-semibold tracking-tight ${
+                          stateCopy.status === 'ELIGIBLE'
+                            ? 'border-[#9ECF42] bg-[#C5F36A]/45 text-[#101713] dark:border-[#C5F36A]/40 dark:bg-[#C5F36A]/10 dark:text-[#C5F36A]'
+                            : stateCopy.status === 'NOT_ELIGIBLE'
+                            ? 'border-red-200 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950/60 dark:text-red-300'
+                            : stateCopy.status === 'MISSING_INFO'
+                            ? 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                            : 'border-[#C6D5BC] bg-[#EBF2E4] text-[#1D2520] dark:border-[#344339] dark:bg-[#1D2520] dark:text-[#D5E6C8]'
+                        }`}
+                      >
+                        {stateCopy.label}
+                      </span>
+                    )}
                   </div>
+
+                  {stateCopy && opp.eligibility && (
+                    <div className="mt-3 rounded-lg bg-[#F7F7F0] p-3 text-xs leading-relaxed dark:bg-[#0C110E]">
+                      <p className="font-semibold text-[#101713] dark:text-[#F7F7F0]">{stateCopy.label} — what this means</p>
+                      <p className="mt-0.5 text-[#455044] dark:text-[#A9B5A6]">{stateCopy.meaning}</p>
+                      <p className="mt-1.5 text-[#455044] dark:text-[#A9B5A6]">
+                        <span className="font-semibold text-[#101713] dark:text-[#F7F7F0]">Next step: </span>
+                        {stateCopy.nextAction}
+                      </p>
+                      {opp.eligibility.recommendedNextSteps.length > 0 && (
+                        <ul className="mt-2 list-disc space-y-1 pl-4 text-[#455044] dark:text-[#A9B5A6]">
+                          {opp.eligibility.recommendedNextSteps.map((step, i) => (
+                            <li key={i}>{step}</li>
+                          ))}
+                        </ul>
+                      )}
+                      <p className="mt-2 border-t border-[#E4E8E0] pt-2 text-[11px] text-[#71806E] dark:border-[#232D27] dark:text-[#8C9A88]">
+                        {ELIGIBILITY_ESTIMATE_NOTICE}
+                      </p>
+                    </div>
+                  )}
 
                   {opp.eligibility && (
                     <div className="mt-4 space-y-1.5 border-t border-[#E4E8E0] pt-3 text-xs dark:border-[#232D27]">
@@ -382,7 +429,8 @@ export function EligibilityPage({ navigate }: { navigate: (path: string) => void
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
