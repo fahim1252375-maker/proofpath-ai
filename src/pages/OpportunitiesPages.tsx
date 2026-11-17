@@ -119,13 +119,13 @@ export function OpportunitiesDirectoryPage({
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
           <p className="font-mono text-[11px] font-semibold tracking-wider text-[#5E6B5B] uppercase dark:text-[#C5F36A]">
-            Audited Opportunity Catalog
+            Opportunity Directory
           </p>
           <h1 className="mt-1 font-display text-2xl font-bold text-[#101713] sm:text-3xl dark:text-[#F7F7F0]">
-            Verified Opportunity Directory
+            Opportunity Directory
           </h1>
           <p className="mt-1 text-sm text-[#5E6B5B] dark:text-[#8C9A88]">
-            Explore audited scholarships, internships, grants, fellowships, and competitions with match intelligence.
+            Browse published records, check their stored status, and compare eligibility estimates. Confirm current details with each provider.
           </p>
         </div>
 
@@ -323,7 +323,7 @@ export function OpportunitiesDirectoryPage({
         <EmptyState
           icon={<Search className="h-5 w-5" />}
           title="No matching opportunities"
-          description="Try broadening your GPA, country, or category filters to see more verified programs."
+          description="No records match the current filters. Clear filters or check back after reviewed listings are published."
         />
       ) : (
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">

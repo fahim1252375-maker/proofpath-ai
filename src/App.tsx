@@ -266,7 +266,11 @@ function AppRouter() {
         sections={[
           {
             heading: 'Data Collection & Minimal Retention',
-            body: 'ProofPath AI stores only the account, eligibility profile, verification audit, and application tracking data you explicitly submit. Uploaded PDFs and screenshots are processed in memory for verification and never resold or shared with third-party marketers.',
+            body: 'ProofPath AI stores account, eligibility profile, conversation, verification, and application data you submit. Conversations are private to your account and can be deleted from the Advisor. In no-cost verification mode, uploaded PDFs and screenshots are not sent to Gemini or stored with the report; the report states that their contents were not analyzed.',
+          },
+          {
+            heading: 'Optional Gemini processing',
+            body: 'Gemini is disabled unless the server operator confirms a Free-tier project and configures a project-wide daily cap, and you separately opt in. When enabled, only your current Advisor message is sent to Google Gemini after basic email, phone, and labeled identity-number redaction. Redaction can miss personal details, so do not include sensitive or confidential information. Your profile, past conversations, verification reports, and uploaded files are not included. Google states that Free-tier prompts and responses may be used to improve its products. You can revoke consent at any time; ProofPath Guided Mode continues to work without Gemini.',
           },
           {
             heading: 'Authentication & Cookie Security',
@@ -282,7 +286,7 @@ function AppRouter() {
         sections={[
           {
             heading: 'Advisory & Verification Scope',
-            body: 'ProofPath AI provides evidence-backed verification analysis and eligibility guidance. Final admission, visa, and funding decisions rest solely with the official host institution.',
+            body: 'ProofPath AI provides local URL/text review and eligibility planning from stored records. A local review does not confirm authenticity or current program details. Final admission, visa, and funding decisions rest with the official host institution.',
           },
           {
             heading: 'Acceptable Use',
@@ -298,7 +302,7 @@ function AppRouter() {
         sections={[
           {
             heading: 'No Fabricated Citations',
-            body: 'Every external link stored in verification evidence records must come directly from retrieved web grounding or the submitted primary source. When authoritative corroboration is unavailable, ProofPath AI reports UNVERIFIED or INSUFFICIENT_EVIDENCE.',
+            body: 'Current no-cost reviews do not retrieve independent web sources. They report INSUFFICIENT_EVIDENCE and do not produce a positive authenticity decision. Older saved reports may include source links from previous review workflows; check each source and its date directly.',
           },
           {
             heading: 'Explicit Missing Data Handling',

@@ -394,6 +394,44 @@ function runMigrations(db: Database.Database): void {
     });
     migrate2();
   }
+
+  if (!applied.has(3)) {
+    const migrate3 = db.transaction(() => {
+      db.exec(`
+        ALTER TABLE messages
+          ADD COLUMN response_mode TEXT NOT NULL DEFAULT 'guided'
+          CHECK (response_mode IN ('guided', 'gemini'));
+
+        CREATE TABLE IF NOT EXISTS ai_user_settings (
+          user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+          external_ai_consent INTEGER NOT NULL DEFAULT 0 CHECK (external_ai_consent IN (0, 1)),
+          consent_version TEXT,
+          consent_updated_at TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS ai_daily_usage (
+          quota_date TEXT NOT NULL,
+          scope_key TEXT NOT NULL,
+          request_count INTEGER NOT NULL DEFAULT 0 CHECK (request_count >= 0),
+          PRIMARY KEY (quota_date, scope_key)
+        );
+
+        CREATE TABLE IF NOT EXISTS ai_request_leases (
+          id TEXT PRIMARY KEY,
+          expires_at INTEGER NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_ai_request_leases_expiry ON ai_request_leases(expires_at);
+      `);
+
+      db.prepare('INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)').run(
+        3,
+        'free_ai_privacy_quota_controls',
+        new Date().toISOString()
+      );
+    });
+    migrate3();
+  }
 }
 
 function seedInitialData(db: Database.Database): void {
@@ -479,392 +517,10 @@ function seedInitialData(db: Database.Database): void {
       studentId,
       'verification',
       'Welcome to ProofPath AI',
-      'Your student eligibility profile is ready. Run live verification on any scholarship URL or PDF before applying.',
+      'Your student profile is ready. Review opportunity details and confirm current information with the provider before applying.',
       '/verify',
       now
     );
-  }
-
-  const oppCount = (db.prepare('SELECT COUNT(*) as c FROM opportunities').get() as { c: number }).c;
-  // The bundled listings and showcase report are demo fixtures, not a live
-  // verification feed. Never publish them from a fresh production database.
-  if (oppCount === 0 && !isProd) {
-    const seedOpps = [
-      {
-        id: 'opp_chevening',
-        slug: 'chevening-uk-government-scholarship',
-        title: 'Chevening UK Government Scholarship',
-        organization: 'UK Foreign, Commonwealth & Development Office',
-        country: 'United Kingdom',
-        category: 'scholarship',
-        education_level: 'masters',
-        funding_type: 'fully_funded',
-        funding_amount: 'Full Tuition + £1,347/mo Stipend + Airfare',
-        min_gpa: 3.0,
-        english_req: 'No fixed test required by Chevening; UK university offer requires IELTS 6.5+',
-        eligible_nationalities_json: JSON.stringify(['Bangladesh', 'India', 'Pakistan', 'Nigeria', 'Kenya', 'Indonesia', 'All Chevening Countries']),
-        min_age: 18,
-        max_age: null,
-        deadline: '2027-11-04',
-        official_url: 'https://www.chevening.org/scholarships/',
-        description: 'Fully funded one-year UK master’s degree scholarship for emerging global leaders with at least two years of work or equivalent experience.',
-        requirements_json: JSON.stringify([
-          'Undergraduate degree enabling UK master’s admission',
-          'At least 2,800 hours (2 years) of work experience',
-          'Return to home country for minimum 2 years after award',
-          'No application fee on official chevening.org portal',
-        ]),
-        verification_status: 'VERIFIED',
-      },
-      {
-        id: 'opp_daad_epos',
-        slug: 'daad-epos-postgraduate-scholarship',
-        title: 'DAAD Development-Related Postgraduate Courses (EPOS)',
-        organization: 'German Academic Exchange Service (DAAD)',
-        country: 'Germany',
-        category: 'scholarship',
-        education_level: 'masters',
-        funding_type: 'fully_funded',
-        funding_amount: '€992/month + Tuition Exemption + Travel Allowance',
-        min_gpa: 3.2,
-        english_req: 'IELTS 6.0 or TOEFL 80 (varies by German university)',
-        eligible_nationalities_json: JSON.stringify(['Bangladesh', 'India', 'Nepal', 'Ghana', 'Kenya', 'Vietnam', 'Developing Countries']),
-        min_age: 21,
-        max_age: 38,
-        deadline: '2027-08-31',
-        official_url: 'https://www.daad.de/en/studying-in-germany/scholarships/daad-funding-programmes/',
-        description: 'Supports graduates from developing and newly industrialized countries pursuing sustainability, engineering, or public policy postgraduate degrees in Germany.',
-        requirements_json: JSON.stringify([
-          'Bachelor’s degree normally completed within the last 6 years',
-          'Minimum 2 years of professional experience after graduation',
-          'Direct application to participating German universities via official DAAD guidelines',
-        ]),
-        verification_status: 'VERIFIED',
-      },
-      {
-        id: 'opp_erasmus_mundus',
-        slug: 'erasmus-mundus-joint-masters',
-        title: 'Erasmus Mundus Joint Masters (EMJM) Scholarship',
-        organization: 'European Commission / EACEA',
-        country: 'European Union',
-        category: 'scholarship',
-        education_level: 'masters',
-        funding_type: 'fully_funded',
-        funding_amount: '€1,400/month + Full Tuition + Visa & Travel Support',
-        min_gpa: 3.3,
-        english_req: 'IELTS 6.5 or TOEFL 90',
-        eligible_nationalities_json: JSON.stringify(['All']),
-        min_age: null,
-        max_age: null,
-        deadline: '2027-01-15',
-        official_url: 'https://www.eacea.ec.europa.eu/scholarships/erasmus-mundus-catalogue_en',
-        description: 'International study programme jointly delivered by a consortium of European universities across multiple EU countries with full scholarship coverage.',
-        requirements_json: JSON.stringify([
-          'First higher education degree (Bachelor’s) before programme start',
-          'Apply directly through official consortium catalogue website',
-          'Two academic/professional recommendation letters & motivation statement',
-        ]),
-        verification_status: 'VERIFIED',
-      },
-      {
-        id: 'opp_fulbright_foreign',
-        slug: 'fulbright-foreign-student-program',
-        title: 'Fulbright Foreign Student Program',
-        organization: 'U.S. Department of State & Binational Commissions',
-        country: 'United States',
-        category: 'fellowship',
-        education_level: 'masters',
-        funding_type: 'fully_funded',
-        funding_amount: 'Full Tuition + Living Stipend + Health Insurance + Airfare',
-        min_gpa: 3.3,
-        english_req: 'TOEFL 90 or IELTS 7.0',
-        eligible_nationalities_json: JSON.stringify(['Bangladesh', 'India', 'Brazil', 'Egypt', 'Indonesia', 'All Partner Countries']),
-        min_age: 21,
-        max_age: null,
-        deadline: '2027-05-15',
-        official_url: 'https://foreign.fulbrightonline.org/',
-        description: 'Flagship U.S. international educational exchange fellowship enabling graduate students, young professionals, and artists to study in the United States.',
-        requirements_json: JSON.stringify([
-          'Citizenship of a participating country',
-          'Completed Bachelor’s degree with strong academic record',
-          'Submit through local U.S. Embassy or Fulbright Commission',
-        ]),
-        verification_status: 'VERIFIED',
-      },
-      {
-        id: 'opp_gates_cambridge',
-        slug: 'gates-cambridge-scholarship',
-        title: 'Gates Cambridge Postgraduate Scholarship',
-        organization: 'Gates Cambridge Trust / University of Cambridge',
-        country: 'United Kingdom',
-        category: 'scholarship',
-        education_level: 'phd',
-        funding_type: 'fully_funded',
-        funding_amount: 'Full University Composition Fee + £21,000/yr Stipend',
-        min_gpa: 3.7,
-        english_req: 'IELTS 7.5 (minimum 7.0 per element)',
-        eligible_nationalities_json: JSON.stringify(['All (Non-UK Citizens)']),
-        min_age: null,
-        max_age: null,
-        deadline: '2027-01-05',
-        official_url: 'https://www.gatescambridge.org/',
-        description: 'Highly selective full-cost postgraduate scholarship for outstanding applicants outside the UK pursuing PhD, MLitt, or one-year postgraduate courses at Cambridge.',
-        requirements_json: JSON.stringify([
-          'Citizen of any country outside the United Kingdom',
-          'Demonstrated academic excellence and leadership capacity',
-          'Combined application via Cambridge Postgraduate Admissions Portal',
-        ]),
-        verification_status: 'VERIFIED',
-      },
-      {
-        id: 'opp_gsoc',
-        slug: 'google-summer-of-code',
-        title: 'Google Summer of Code (GSoC)',
-        organization: 'Google Open Source',
-        country: 'Remote / Global',
-        category: 'internship',
-        education_level: 'all',
-        funding_type: 'paid_stipend',
-        funding_amount: '$1,500–$6,600 Stipend (PPP-adjusted by country)',
-        min_gpa: null,
-        english_req: 'Working proficiency in English for mentor collaboration',
-        eligible_nationalities_json: JSON.stringify(['All']),
-        min_age: 18,
-        max_age: null,
-        deadline: '2027-04-02',
-        official_url: 'https://summerofcode.withgoogle.com/',
-        description: 'Global remote open-source software engineering mentorship program connecting university students and beginner contributors with open-source organizations.',
-        requirements_json: JSON.stringify([
-          'At least 18 years old at registration',
-          'Eligible to work in country of residence during coding period',
-          'Zero registration fees — never pay third-party prep agencies',
-        ]),
-        verification_status: 'VERIFIED',
-      },
-      {
-        id: 'opp_mext',
-        slug: 'mext-japanese-government-scholarship',
-        title: 'MEXT Japanese Government Research Scholarship',
-        organization: 'Ministry of Education, Culture, Sports, Science and Technology (Japan)',
-        country: 'Japan',
-        category: 'scholarship',
-        education_level: 'masters',
-        funding_type: 'fully_funded',
-        funding_amount: '¥143,000–¥145,000/month + Full Tuition + Round-trip Flight',
-        min_gpa: 3.2,
-        english_req: 'IELTS 6.0 or Japanese Language Proficiency Certificate (program-dependent)',
-        eligible_nationalities_json: JSON.stringify(['Bangladesh', 'India', 'Indonesia', 'Malaysia', 'Vietnam', 'All Diplomatic Partner Nations']),
-        min_age: 18,
-        max_age: 34,
-        deadline: '2027-05-25',
-        official_url: 'https://www.studyinjapan.go.jp/en/planning/scholarships/mext-scholarships/',
-        description: 'Japanese government-funded research, master’s, and doctoral scholarship administered through Japanese Embassies and partner universities.',
-        requirements_json: JSON.stringify([
-          'Under 35 years of age on April 1 of arrival year',
-          'Strong GPA converted on MEXT 3.00 scale (typically >= 2.30/3.00)',
-          'Embassy screening includes written exam and interview',
-        ]),
-        verification_status: 'VERIFIED',
-      },
-      {
-        id: 'opp_cern_summer',
-        slug: 'cern-summer-student-programme',
-        title: 'CERN Summer Student Programme',
-        organization: 'CERN (European Organization for Nuclear Research)',
-        country: 'Switzerland',
-        category: 'internship',
-        education_level: 'undergraduate',
-        funding_type: 'paid_stipend',
-        funding_amount: 'CHF 93/day Subsistence Allowance + Travel Grant + Insurance',
-        min_gpa: 3.3,
-        english_req: 'Good working knowledge of English or French',
-        eligible_nationalities_json: JSON.stringify(['All']),
-        min_age: 18,
-        max_age: null,
-        deadline: '2027-01-26',
-        official_url: 'https://careers.cern/summer',
-        description: '8 to 13-week paid on-site research internship in Geneva for undergraduate and master’s students in Physics, Computing, Engineering, and Mathematics.',
-        requirements_json: JSON.stringify([
-          'Completed at least 3 years of full-time university studies',
-          'Remains registered as a student during summer stay',
-          'Official applications accepted only on careers.cern',
-        ]),
-        verification_status: 'VERIFIED',
-      },
-      {
-        id: 'opp_imagine_cup',
-        slug: 'microsoft-imagine-cup-global',
-        title: 'Microsoft Imagine Cup Global Student Competition',
-        organization: 'Microsoft',
-        country: 'Global / Hybrid',
-        category: 'competition',
-        education_level: 'all',
-        funding_type: 'prize_pool',
-        funding_amount: '$100,000 Grand Prize + Azure Credits + Mentorship',
-        min_gpa: null,
-        english_req: 'English pitch & technical documentation',
-        eligible_nationalities_json: JSON.stringify(['All']),
-        min_age: 18,
-        max_age: null,
-        deadline: '2027-01-22',
-        official_url: 'https://imaginecup.microsoft.com/',
-        description: 'Premier global student technology startup and AI innovation competition empowering student teams to build cloud-backed social and enterprise products.',
-        requirements_json: JSON.stringify([
-          'Enrolled student aged 18+ at an accredited institution',
-          'Team of up to 4 eligible students',
-          'Original software prototype built with cloud/AI architecture',
-        ]),
-        verification_status: 'SUPPORTED',
-      },
-      {
-        id: 'opp_swiss_excellence',
-        slug: 'swiss-government-excellence-scholarships',
-        title: 'Swiss Government Excellence Scholarships (FCS)',
-        organization: 'Swiss Federal Commission for Scholarships',
-        country: 'Switzerland',
-        category: 'grant',
-        education_level: 'phd',
-        funding_type: 'fully_funded',
-        funding_amount: 'CHF 1,920/month + Tuition Waiver + Housing Allowance',
-        min_gpa: 3.5,
-        english_req: 'IELTS 6.5 / University Host Confirmation',
-        eligible_nationalities_json: JSON.stringify(['Bangladesh', 'India', 'United States', 'Japan', '180+ Partner Countries']),
-        min_age: null,
-        max_age: 35,
-        deadline: '2026-12-01',
-        official_url: 'https://www.sbfi.admin.ch/sbfi/en/home/education/scholarships-and-grants/swiss-government-excellence-scholarships.html',
-        description: 'Research, PhD, and postdoctoral fellowships awarded to young researchers from abroad who have completed a master’s degree or PhD.',
-        requirements_json: JSON.stringify([
-          'Master’s degree completed before July 31',
-          'Invitation letter from an academic host professor at a Swiss public university',
-          'Submit hardcopy/electronic dossier through Swiss diplomatic representation',
-        ]),
-        verification_status: 'VERIFIED',
-      },
-    ];
-
-    const seededAdminId = isProd ? null : 'usr_admin_demo';
-    const insertOpp = db.prepare(`
-      INSERT INTO opportunities (
-        id, slug, title, organization, country, category, education_level, funding_type, funding_amount,
-        min_gpa, english_req, eligible_nationalities_json, min_age, max_age, deadline, official_url,
-        description, requirements_json, verification_status, last_verified_at, is_published, created_by, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
-    `);
-
-    for (const o of seedOpps) {
-      insertOpp.run(
-        o.id,
-        o.slug,
-        o.title,
-        o.organization,
-        o.country,
-        o.category,
-        o.education_level,
-        o.funding_type,
-        o.funding_amount,
-        o.min_gpa,
-        o.english_req,
-        o.eligible_nationalities_json,
-        o.min_age,
-        o.max_age,
-        o.deadline,
-        o.official_url,
-        o.description,
-        o.requirements_json,
-        o.verification_status,
-        now,
-        seededAdminId,
-        now,
-        now
-      );
-    }
-
-    if (!isProd) {
-      db.prepare(`
-        INSERT OR IGNORE INTO saved_opportunities (id, user_id, opportunity_id, created_at)
-        VALUES (?, 'usr_student_demo', 'opp_chevening', ?), (?, 'usr_student_demo', 'opp_erasmus_mundus', ?)
-      `).run('sav_1', now, 'sav_2', now);
-
-      db.prepare(`
-        INSERT OR IGNORE INTO applications (
-          id, user_id, opportunity_id, custom_title, organization, status, deadline, notes, checklist_json, activity_json, priority, created_at, updated_at
-        ) VALUES (?, 'usr_student_demo', 'opp_erasmus_mundus', 'Erasmus Mundus Joint Masters (EMJM)', 'European Commission / EACEA', 'preparing', '2027-01-15', ?, ?, ?, 'high', ?, ?)
-      `).run(
-        'app_seed_1',
-        'Targeting EMJMD Artificial Intelligence & Data Engineering consortiums. Verify official consortium portal before uploading transcripts.',
-        JSON.stringify([
-          { id: 'c1', label: 'Official Bachelor Transcript & Degree Certificate', done: true },
-          { id: 'c2', label: 'IELTS 6.5+ Academic Score Report', done: true },
-          { id: 'c3', label: 'Two Academic Reference Letters', done: false },
-          { id: 'c4', label: 'Statement of Purpose tailored to Consortium', done: false },
-        ]),
-        JSON.stringify([
-          { timestamp: now, action: 'Application added to Preparing stage from Verified Opportunity Directory' },
-        ]),
-        now,
-        now
-      );
-    }
-
-    // Seed initial public showcase verification report so Public Verification has real DB record
-    db.prepare(`
-      INSERT OR IGNORE INTO verification_reports (
-        id, user_id, opportunity_id, input_type, submitted_url, submitted_title, submitted_text,
-        overall_status, summary, extracted_info_json, claims_json, risk_indicators_json,
-        confidence_limitations, recommended_actions_json, is_saved, created_at
-      ) VALUES (?, ?, 'opp_chevening', 'url', 'https://www.chevening.org/scholarships/', 'Chevening UK Government Scholarship', NULL,
-        'VERIFIED', ?, ?, ?, ?, ?, ?, 1, ?)
-    `).run(
-      'rep_seed_chevening',
-      isProd ? null : 'usr_student_demo',
-      'Official UK Foreign, Commonwealth & Development Office domain (chevening.org) verified. No application fees exist on official portals; third-party payment requests indicate fraud.',
-      JSON.stringify({
-        title: 'Chevening UK Government Scholarship',
-        organization: 'UK Foreign, Commonwealth & Development Office',
-        country: 'United Kingdom',
-        category: 'scholarship',
-        deadline: '2027-11-04',
-        fundingAmount: 'Full Tuition + Living Stipend + Return Airfare',
-        officialUrl: 'https://www.chevening.org/scholarships/',
-        feesMentioned: 'None ($0 official application fee)',
-      }),
-      JSON.stringify([
-        {
-          claim: 'Chevening is a fully funded UK Government scholarship covering tuition and living costs.',
-          verdict: 'VERIFIED',
-          explanation: 'Confirmed directly on the official chevening.org scholarship overview and UK FCDO programme guidelines.',
-          evidenceExcerpt: 'Chevening Scholarships cover university tuition fees, a monthly living stipend, and travel costs to and from the UK.',
-          sourceUrl: 'https://www.chevening.org/scholarships/',
-        },
-        {
-          claim: 'Applicants do not pay any application or processing fee.',
-          verdict: 'VERIFIED',
-          explanation: 'Official Chevening application portals never charge processing fees.',
-          evidenceExcerpt: 'Applying for a Chevening Scholarship is free of charge.',
-          sourceUrl: 'https://www.chevening.org/apply/',
-        },
-      ]),
-      JSON.stringify([
-        {
-          severity: 'low',
-          flag: 'Impersonation awareness',
-          detail: 'Always verify the browser domain ends strictly in .chevening.org before submitting personal documents.',
-        },
-      ]),
-      'Live deadline windows open annually between August and November; confirm exact cycle opening dates directly on chevening.org.',
-      JSON.stringify([
-        'Bookmark the official portal https://www.chevening.org/scholarships/',
-        'Ignore any agent or email requesting processing fees',
-        'Verify 2,800 hours work experience calculation before applying',
-      ]),
-      now
-    );
-
-    db.prepare(`
-      INSERT OR IGNORE INTO evidence_records (id, report_id, claim_index, source_url, source_title, excerpt, stance, retrieved_at)
-      VALUES (?, 'rep_seed_chevening', 0, 'https://www.chevening.org/scholarships/', 'Chevening Scholarships Official Portal', 'Fully funded UK government scholarships for emerging leaders worldwide.', 'supports', ?)
-    `).run('ev_seed_1', now);
   }
 
   const contentCount = (db.prepare('SELECT COUNT(*) as c FROM site_content').get() as { c: number }).c;
@@ -875,15 +531,31 @@ function seedInitialData(db: Database.Database): void {
     `).run(
       'landing_announcement',
       JSON.stringify({
-        headline: 'Your Future Deserves Verified Opportunities.',
+        headline: 'Your Future Deserves Clearer Opportunity Records.',
         subheadline:
-          'Discover scholarships, fellowships, internships and global opportunities with AI-powered verification, personalized eligibility intelligence, and transparent evidence.',
-        trustBanner: 'Review source links alongside each result. Missing evidence stays visible.',
+          'Explore scholarship records, review submitted opportunity details, and plan applications with eligibility checks tied to your ProofPath profile.',
+        trustBanner: 'Local reviews show limitations and flag details that need confirmation with the provider.',
       }),
       isProd ? null : 'usr_admin_demo',
       now
     );
   }
+
+  db.prepare(`
+    UPDATE site_content
+    SET value_json = json_set(
+      value_json,
+      '$.headline', ?,
+      '$.subheadline', ?,
+      '$.trustBanner', ?
+    )
+    WHERE key = 'landing_announcement'
+      AND json_extract(value_json, '$.headline') = 'Your Future Deserves Verified Opportunities.'
+  `).run(
+    'Your Future Deserves Clearer Opportunity Records.',
+    'Explore scholarship records, review submitted opportunity details, and plan applications with eligibility checks tied to your ProofPath profile.',
+    'Local reviews show limitations and flag details that need confirmation with the provider.'
+  );
 }
 
 export function mapUserRow(row: UserRecord): SafeUser {

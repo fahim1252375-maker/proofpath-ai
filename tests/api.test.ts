@@ -8,7 +8,8 @@ import { createApp } from '../server/app.ts';
 import { assertSafePublicUrl } from '../server/ssrf.ts';
 import { validateMagicBytes } from '../server/security.ts';
 import { buildTrustProfile, evaluateEligibility } from '../server/eligibility.ts';
-import { buildEvidenceRecords } from '../server/ai.ts';
+import { buildEvidenceRecords, runVerificationEngine } from '../server/ai.ts';
+import { insertTestOpportunities } from './helpers/test-opportunities.ts';
 import type Database from 'better-sqlite3';
 
 let server: http.Server;
@@ -22,6 +23,9 @@ beforeAll(async () => {
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'proofpath-test-'));
   dbPath = path.join(tempDir, 'test.db');
   db = initDatabase(dbPath);
+  expect(db.prepare('SELECT COUNT(*) AS count FROM opportunities').get()).toMatchObject({ count: 0 });
+  expect(db.prepare('SELECT COUNT(*) AS count FROM verification_reports').get()).toMatchObject({ count: 0 });
+  insertTestOpportunities(db);
   const app = createApp(db);
 
   await new Promise<void>((resolve) => {
@@ -47,13 +51,15 @@ function extractCookie(res: Response): string {
 }
 
 describe('ProofPath AI Enterprise API & Security Suite', () => {
-  it('returns healthy status and real public statistics', async () => {
+  it('returns healthy status and public statistics reflect stored status', async () => {
     const health = await fetch(`${baseUrl}/api/health`).then((r) => r.json());
     expect(health.status).toBe('ok');
     expect(health.database).toBe('connected');
 
     const stats = await fetch(`${baseUrl}/api/public/stats`).then((r) => r.json());
-    expect(stats.verifiedOpportunities).toBeGreaterThanOrEqual(8);
+    expect(stats.verifiedOpportunities).toBe(0);
+    expect(stats.totalOpportunities).toBeGreaterThan(0);
+    expect(stats.verificationReports).toBe(0);
     expect(stats.countriesCovered).toBeGreaterThanOrEqual(4);
   });
 
@@ -131,7 +137,7 @@ describe('ProofPath AI Enterprise API & Security Suite', () => {
         'X-CSRF-Token': regData.csrfToken,
       },
       body: JSON.stringify({
-        customTitle: 'Chevening Application',
+        customTitle: 'Example Opportunity Alpha Application',
         organization: 'UK FCDO',
         status: 'preparing',
         deadline: '2027-11-04',
@@ -150,8 +156,8 @@ describe('ProofPath AI Enterprise API & Security Suite', () => {
     const dbCheck = initDatabase(dbPath);
     const savedApp = dbCheck
       .prepare('SELECT custom_title FROM applications WHERE custom_title = ?')
-      .get('Chevening Application') as { custom_title: string } | undefined;
-    expect(savedApp?.custom_title).toBe('Chevening Application');
+      .get('Example Opportunity Alpha Application') as { custom_title: string } | undefined;
+    expect(savedApp?.custom_title).toBe('Example Opportunity Alpha Application');
     dbCheck.close();
   });
 
@@ -209,8 +215,8 @@ describe('ProofPath AI Enterprise API & Security Suite', () => {
     `).run(privateReportId, now);
 
     const publicFeed = await fetch(`${baseUrl}/api/verifications?scope=public`).then((response) => response.json());
-    expect(publicFeed.items.some((item: { id: string }) => item.id === privateReportId)).toBe(false);
-    expect(publicFeed.items.some((item: { id: string }) => item.id === 'rep_seed_chevening')).toBe(true);
+    expect(publicFeed.items).toEqual([]);
+    expect(db.prepare("SELECT COUNT(*) AS count FROM verification_reports WHERE id = 'rep_seed_chevening'").get()).toMatchObject({ count: 0 });
 
     const login = await fetch(`${baseUrl}/api/auth/login`, {
       method: 'POST',
@@ -224,8 +230,31 @@ describe('ProofPath AI Enterprise API & Security Suite', () => {
     expect(mine.items.some((item: { id: string }) => item.id === privateReportId)).toBe(true);
   });
 
+  it('does not retain uploaded file bytes or filename metadata in verification reports', async () => {
+    const report = await runVerificationEngine(db, 'usr_student_demo', {
+      inputType: 'file',
+      fileName: 'private-identity-document.pdf',
+      fileMime: 'application/pdf',
+      fileBuffer: Buffer.from('%PDF-1.7 test fixture'),
+    });
+    expect(report.overallStatus).toBe('INSUFFICIENT_EVIDENCE');
+    expect(report.submittedTitle).toBe('Uploaded document');
+    expect(report.fileName).toBeNull();
+    expect(report.summary).toContain('contents were not extracted');
+
+    const stored = db.prepare(
+      'SELECT submitted_title, submitted_text, file_name, file_mime FROM verification_reports WHERE id = ?'
+    ).get(report.id) as { submitted_title: string; submitted_text: string | null; file_name: string | null; file_mime: string | null };
+    expect(stored).toEqual({
+      submitted_title: 'Uploaded document',
+      submitted_text: null,
+      file_name: null,
+      file_mime: null,
+    });
+  });
+
   it('describes domain suffixes as signals rather than proof of institutional status', () => {
-    const row = db.prepare('SELECT * FROM opportunities WHERE id = ?').get('opp_chevening') as Record<string, unknown>;
+    const row = db.prepare('SELECT * FROM opportunities WHERE id = ?').get('opp_test_one') as Record<string, unknown>;
     const opportunity = mapOpportunityRow(row);
     const trust = buildTrustProfile(
       { ...opportunity, officialUrl: 'https://sample-foundation.org/program' },
@@ -234,7 +263,7 @@ describe('ProofPath AI Enterprise API & Security Suite', () => {
 
     expect(trust.domainClassification).toContain('nonprofit status is not established');
     expect(trust.domainClassification).not.toContain('Official Foundation');
-    expect(trust.riskSummary).toContain('not evidence of safety');
+    expect(trust.riskSummary).toContain('Available verification evidence is limited or insufficient');
   });
 
   it('allows an authenticated user to change their password and revokes other sessions', async () => {
@@ -289,14 +318,14 @@ describe('ProofPath AI Enterprise API & Security Suite', () => {
   });
 
   it('supports opportunity search, filtering, and side-by-side comparison', async () => {
-    const searchRes = await fetch(`${baseUrl}/api/opportunities?q=Chevening&category=scholarship`).then((r) =>
+    const searchRes = await fetch(`${baseUrl}/api/opportunities?q=Example Opportunity Alpha&category=scholarship`).then((r) =>
       r.json()
     );
     expect(searchRes.items.length).toBeGreaterThanOrEqual(1);
-    expect(searchRes.items[0].title).toContain('Chevening');
+    expect(searchRes.items[0].title).toContain('Example Opportunity Alpha');
 
     const cmpRes = await fetch(
-      `${baseUrl}/api/opportunities/compare?ids=opp_chevening,opp_erasmus_mundus`
+      `${baseUrl}/api/opportunities/compare?ids=opp_test_one,opp_test_two`
     ).then((r) => r.json());
     expect(cmpRes.items.length).toBe(2);
   });
@@ -380,7 +409,7 @@ describe('ProofPath AI Enterprise API & Security Suite', () => {
   it('evaluates eligibility accurately without assuming missing fields', () => {
     const opp = db
       .prepare('SELECT * FROM opportunities WHERE id = ?')
-      .get('opp_gates_cambridge') as Record<string, unknown>;
+      .get('opp_test_one') as Record<string, unknown>;
 
     const mappedOpp = {
       id: String(opp.id),
@@ -450,9 +479,9 @@ describe('ProofPath AI Enterprise API & Security Suite', () => {
   });
 
   it('returns matchIntelligence, trustProfile, and ProofPath 2.0 student analytics intelligence', async () => {
-    const detailRes = await fetch(`${baseUrl}/api/opportunities/opp_chevening`).then((r) => r.json());
+    const detailRes = await fetch(`${baseUrl}/api/opportunities/opp_test_one`).then((r) => r.json());
     expect(detailRes.opportunity.trustProfile).toBeDefined();
-    expect(detailRes.opportunity.trustProfile.officialDomain).toBe('chevening.org');
+    expect(detailRes.opportunity.trustProfile.officialDomain).toBe('example.org');
     expect(detailRes.opportunity.matchIntelligence).toBeDefined();
     expect(Array.isArray(detailRes.verificationHistory)).toBe(true);
 
@@ -480,6 +509,116 @@ describe('ProofPath AI Enterprise API & Security Suite', () => {
     expect(analytics.deadlineIntelligence).toHaveProperty('upcoming');
     expect(analytics.deadlineIntelligence).toHaveProperty('recentlyExpired');
     expect(Array.isArray(analytics.actionCenter)).toBe(true);
+  });
+
+  it('keeps Copilot consent, conversations, and verification context scoped to each authenticated student', async () => {
+    const previous = {
+      aiEnabled: process.env.AI_ENABLED,
+      freeTier: process.env.AI_FREE_TIER_CONFIRMED,
+      globalLimit: process.env.AI_GLOBAL_DAILY_LIMIT,
+      apiKey: process.env.GEMINI_API_KEY,
+    };
+    process.env.AI_ENABLED = 'false';
+    process.env.AI_FREE_TIER_CONFIRMED = 'false';
+    process.env.AI_GLOBAL_DAILY_LIMIT = '0';
+    delete process.env.GEMINI_API_KEY;
+
+    const register = async (suffix: string) => {
+      const response = await fetch(`${baseUrl}/api/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fullName: `Copilot ${suffix}`,
+          email: `copilot_${suffix}_${Date.now()}@example.edu`,
+          password: 'StrongPassword123!',
+        }),
+      });
+      expect(response.status).toBe(201);
+      const body = await response.json();
+      return { cookie: extractCookie(response), csrfToken: body.csrfToken };
+    };
+
+    try {
+      const studentA = await register('a');
+      const studentB = await register('b');
+      const userA = db.prepare("SELECT id FROM users WHERE email LIKE 'copilot_a_%' ORDER BY created_at DESC LIMIT 1")
+        .get() as { id: string };
+      const report = await runVerificationEngine(db, userA.id, {
+        inputType: 'text',
+        submittedTitle: 'Private application notice',
+        submittedText: 'This private application notice has no independent verification.',
+      });
+      expect(report.overallStatus).toBe('INSUFFICIENT_EVIDENCE');
+
+      const initialStatus = await fetch(`${baseUrl}/api/assistant/status`, {
+        headers: { Cookie: studentA.cookie },
+      }).then((response) => response.json());
+      expect(initialStatus.consent).toBe(false);
+      expect(initialStatus.aiReady).toBe(false);
+
+      const chat = await fetch(`${baseUrl}/api/assistant/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Cookie: studentA.cookie,
+          'X-CSRF-Token': studentA.csrfToken,
+        },
+        body: JSON.stringify({ message: 'Explain this verification report.', contextReportId: report.id }),
+      });
+      expect(chat.status).toBe(200);
+      const chatData = await chat.json();
+      expect(chatData.assistantMessage.responseMode).toBe('guided');
+      expect(chatData.assistantMessage.content).toContain('Private application notice');
+      expect(chatData.fallbackReason).toBe('consent_required');
+
+      const crossUserMessages = await fetch(
+        `${baseUrl}/api/assistant/conversations/${chatData.conversationId}/messages`,
+        { headers: { Cookie: studentB.cookie } }
+      );
+      expect(crossUserMessages.status).toBe(404);
+
+      const crossUserReport = await fetch(`${baseUrl}/api/assistant/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Cookie: studentB.cookie,
+          'X-CSRF-Token': studentB.csrfToken,
+        },
+        body: JSON.stringify({ message: 'Explain this report.', contextReportId: report.id }),
+      });
+      expect(crossUserReport.status).toBe(404);
+
+      const consent = await fetch(`${baseUrl}/api/assistant/consent`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Cookie: studentA.cookie,
+          'X-CSRF-Token': studentA.csrfToken,
+        },
+        body: JSON.stringify({ enabled: true }),
+      });
+      expect(consent.status).toBe(200);
+      const updatedStatus = await fetch(`${baseUrl}/api/assistant/status`, {
+        headers: { Cookie: studentA.cookie },
+      }).then((response) => response.json());
+      expect(updatedStatus.consent).toBe(true);
+
+      const clear = await fetch(`${baseUrl}/api/assistant/conversations`, {
+        method: 'DELETE',
+        headers: { Cookie: studentA.cookie, 'X-CSRF-Token': studentA.csrfToken },
+      });
+      expect(clear.status).toBe(200);
+      expect((await clear.json()).deleted).toBeGreaterThanOrEqual(1);
+    } finally {
+      if (previous.aiEnabled === undefined) delete process.env.AI_ENABLED;
+      else process.env.AI_ENABLED = previous.aiEnabled;
+      if (previous.freeTier === undefined) delete process.env.AI_FREE_TIER_CONFIRMED;
+      else process.env.AI_FREE_TIER_CONFIRMED = previous.freeTier;
+      if (previous.globalLimit === undefined) delete process.env.AI_GLOBAL_DAILY_LIMIT;
+      else process.env.AI_GLOBAL_DAILY_LIMIT = previous.globalLimit;
+      if (previous.apiKey === undefined) delete process.env.GEMINI_API_KEY;
+      else process.env.GEMINI_API_KEY = previous.apiKey;
+    }
   });
 
   it('blocks demo evaluation account login when NODE_ENV is production', async () => {

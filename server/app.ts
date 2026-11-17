@@ -29,6 +29,7 @@ import {
   evaluateEligibility,
 } from './eligibility.ts';
 import { AiServiceError, runAssistantChat, runVerificationEngine } from './ai.ts';
+import { AI_CONSENT_VERSION, getAiRuntimeConfig, getAiUsageForToday } from './ai-policy.ts';
 import { registerIntelligenceRoutes } from './intelligence.ts';
 import { scoreSourceCredibility } from './source-credibility.ts';
 import type { SafeUser, StudentProfile, UserRecord, UserRole, VerificationReportDTO } from './types.ts';
@@ -126,7 +127,14 @@ export function createApp(db: Database.Database) {
     const started = Date.now();
     res.on('finish', () => {
       if (process.env.NODE_ENV !== 'test') {
-        console.log(`[API] ${req.method} ${req.originalUrl} -> ${res.statusCode} (${Date.now() - started}ms)`);
+        console.log(JSON.stringify({
+          level: 'info',
+          event: 'http_request',
+          method: req.method,
+          route: req.route?.path || 'unmatched',
+          status: res.statusCode,
+          durationMs: Date.now() - started,
+        }));
       }
     });
     next();
@@ -259,19 +267,20 @@ export function createApp(db: Database.Database) {
   app.get('/api/health', (_req, res) => {
     try {
       const dbOk = db.prepare('SELECT 1 as ok').get() as { ok: number };
-      const geminiConfigured =
-        Boolean(process.env.GEMINI_API_KEY) && process.env.GEMINI_API_KEY !== 'MY_GEMINI_API_KEY';
+      const migration = db.prepare('SELECT MAX(version) AS version FROM schema_migrations').get() as { version: number | null };
+      const aiConfig = getAiRuntimeConfig();
       res.json({
         status: 'ok',
         database: dbOk.ok === 1 ? 'connected' : 'error',
-        aiConfigured: geminiConfigured,
+        schemaVersion: migration.version || 0,
+        aiEnabled: aiConfig.ready,
         timestamp: new Date().toISOString(),
       });
-    } catch (err) {
+    } catch {
       res.status(503).json({
         status: 'degraded',
         database: 'disconnected',
-        error: err instanceof Error ? err.message : 'Health check failed',
+        error: 'Health check failed',
       });
     }
   });
@@ -307,6 +316,7 @@ export function createApp(db: Database.Database) {
     const totalOpportunities = (
       db.prepare('SELECT COUNT(*) as c FROM opportunities WHERE is_published = 1').get() as { c: number }
     ).c;
+    // Public stats may only count anonymous reports, never owner-scoped ones.
     const verificationReports = (
       db
         .prepare(
@@ -1049,8 +1059,8 @@ export function createApp(db: Database.Database) {
         createNotification(db, {
           userId: req.authUser.id,
           type: 'verification',
-          title: `Verification Complete: ${report.overallStatus}`,
-          message: `${report.extractedInfo.title} audited with ${report.claims.length} claim checks.`,
+          title: `Local review: ${report.overallStatus}`,
+          message: 'Page reachability and basic text cues were checked. Independent source confirmation is unavailable in no-cost mode.',
           link: `/verify?report=${report.id}`,
         });
       }
@@ -1103,8 +1113,8 @@ export function createApp(db: Database.Database) {
         createNotification(db, {
           userId: req.authUser.id,
           type: 'verification',
-          title: `Text Verification: ${report.overallStatus}`,
-          message: `${report.extractedInfo.title} analyzed across ${report.claims.length} claims.`,
+          title: `Local text review: ${report.overallStatus}`,
+          message: 'Basic wording cues were checked. Independent source confirmation is unavailable in no-cost mode.',
           link: `/verify?report=${report.id}`,
         });
       }
@@ -1159,8 +1169,8 @@ export function createApp(db: Database.Database) {
           createNotification(db, {
             userId: req.authUser.id,
             type: 'verification',
-            title: `Document Audit: ${report.overallStatus}`,
-            message: `${req.file.originalname} checked and structured into ${report.claims.length} verifiable claims.`,
+            title: `Document check: ${report.overallStatus}`,
+            message: 'File type was checked. Document contents were not extracted or stored in no-cost mode.',
             link: `/verify?report=${report.id}`,
           });
         }
@@ -1171,7 +1181,7 @@ export function createApp(db: Database.Database) {
           res.status(err.statusCode).json({ error: err.message });
           return;
         }
-        res.status(500).json({ error: 'Unexpected error analyzing uploaded document.' });
+        res.status(500).json({ error: 'Unable to process the uploaded file.' });
       }
     }
   );
@@ -1179,15 +1189,9 @@ export function createApp(db: Database.Database) {
   app.get('/api/verifications', (req: AuthedRequest, res) => {
     const scope = String(req.query.scope || 'mine');
     if (scope === 'public' || !req.authUser) {
-      const rows = db
-        .prepare(
-          `SELECT * FROM verification_reports
-           WHERE (user_id IS NULL OR (? = 1 AND id = 'rep_seed_chevening'))
-             AND overall_status IN ('VERIFIED', 'SUPPORTED', 'CONTRADICTED', 'EXPIRED')
-           ORDER BY created_at DESC LIMIT 12`
-        )
-        .all(process.env.NODE_ENV === 'production' ? 0 : 1) as Array<Record<string, unknown>>;
-      res.json({ items: rows.map((r) => hydrateReportRow(db, r)) });
+      // Reports are private by default. There is no explicit public-sharing
+      // consent field, so never expose anonymous or owner-scoped reports here.
+      res.json({ items: [] });
       return;
     }
 
@@ -1206,7 +1210,8 @@ export function createApp(db: Database.Database) {
       res.status(404).json({ error: 'Verification report not found.' });
       return;
     }
-    if (process.env.NODE_ENV === 'production' && row.id === 'rep_seed_chevening') {
+    // The showcase report id is restricted to staff roles in every environment.
+    if (row.id === 'rep_seed_chevening' && req.authUser?.role !== 'admin' && req.authUser?.role !== 'moderator') {
       res.status(404).json({ error: 'Verification report not found.' });
       return;
     }
@@ -1515,6 +1520,58 @@ export function createApp(db: Database.Database) {
   });
 
   // ==================== AI ASSISTANT (ENGLISH & BANGLA) ====================
+  app.get('/api/assistant/status', requireAuth, (req: AuthedRequest, res) => {
+    const config = getAiRuntimeConfig();
+    const usage = getAiUsageForToday(db, req.authUser!.id);
+    const settings = db.prepare('SELECT external_ai_consent, consent_version, consent_updated_at FROM ai_user_settings WHERE user_id = ?')
+      .get(req.authUser!.id) as { external_ai_consent: number; consent_version: string | null; consent_updated_at: string | null } | undefined;
+    const consent = settings?.external_ai_consent === 1 && settings.consent_version === AI_CONSENT_VERSION;
+    let availability = 'ready';
+    if (!consent) availability = 'consent_required';
+    else if (!config.enabled) availability = 'disabled';
+    else if (!config.freeTierConfirmed) availability = 'free_tier_unconfirmed';
+    else if (!config.modelAllowed) availability = 'model_unavailable';
+    else if (!config.apiKeyConfigured) availability = 'api_key_missing';
+    else if (config.globalDailyLimit < 1) availability = 'global_limit_unconfigured';
+    else if (usage.usedToday >= config.userDailyLimit) availability = 'user_limit';
+    else if (usage.globalUsedToday >= config.globalDailyLimit) availability = 'global_limit';
+
+    res.json({
+      availability,
+      aiReady: config.ready,
+      consent,
+      consentUpdatedAt: settings?.consent_updated_at || null,
+      model: config.modelAllowed ? config.model : null,
+      usedToday: usage.usedToday,
+      dailyLimit: config.userDailyLimit,
+      remainingToday: Math.max(0, config.userDailyLimit - usage.usedToday),
+      resetAt: usage.resetAt,
+    });
+  });
+
+  app.put('/api/assistant/consent', requireAuth, (req: AuthedRequest, res) => {
+    const parsed = z.object({ enabled: z.boolean() }).safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Choose whether to allow Gemini processing.' });
+      return;
+    }
+    const now = new Date().toISOString();
+    db.prepare(`
+      INSERT INTO ai_user_settings (user_id, external_ai_consent, consent_version, consent_updated_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(user_id) DO UPDATE SET
+        external_ai_consent = excluded.external_ai_consent,
+        consent_version = excluded.consent_version,
+        consent_updated_at = excluded.consent_updated_at
+    `).run(
+      req.authUser!.id,
+      parsed.data.enabled ? 1 : 0,
+      parsed.data.enabled ? AI_CONSENT_VERSION : null,
+      now
+    );
+    res.json({ consent: parsed.data.enabled, updatedAt: now });
+  });
+
   app.get('/api/assistant/conversations', requireAuth, (req: AuthedRequest, res) => {
     const rows = db
       .prepare('SELECT * FROM conversations WHERE user_id = ? ORDER BY updated_at DESC LIMIT 30')
@@ -1543,6 +1600,22 @@ export function createApp(db: Database.Database) {
     if (!parsed.success) {
       res.status(400).json({ error: 'Invalid conversation input.' });
       return;
+    }
+    if (parsed.data.contextOpportunityId) {
+      const opportunity = db.prepare('SELECT id FROM opportunities WHERE id = ? AND is_published = 1')
+        .get(parsed.data.contextOpportunityId);
+      if (!opportunity) {
+        res.status(404).json({ error: 'Published opportunity not found.' });
+        return;
+      }
+    }
+    if (parsed.data.contextReportId) {
+      const report = db.prepare('SELECT id FROM verification_reports WHERE id = ? AND user_id = ?')
+        .get(parsed.data.contextReportId, req.authUser!.id);
+      if (!report) {
+        res.status(404).json({ error: 'Verification report not found.' });
+        return;
+      }
     }
     const id = `conv_${crypto.randomUUID()}`;
     const now = new Date().toISOString();
@@ -1579,9 +1652,15 @@ export function createApp(db: Database.Database) {
         role: m.role as 'user' | 'assistant',
         content: String(m.content),
         groundingRefs: JSON.parse(String(m.grounding_refs_json || '[]')),
+        responseMode: m.response_mode === 'gemini' ? 'gemini' : 'guided',
         createdAt: String(m.created_at),
       })),
     });
+  });
+
+  app.delete('/api/assistant/conversations', requireAuth, (req: AuthedRequest, res) => {
+    const result = db.prepare('DELETE FROM conversations WHERE user_id = ?').run(req.authUser!.id);
+    res.json({ ok: true, deleted: result.changes });
   });
 
   app.delete('/api/assistant/conversations/:id', requireAuth, (req: AuthedRequest, res) => {
@@ -1603,9 +1682,39 @@ export function createApp(db: Database.Database) {
       return;
     }
 
-    const now = new Date().toISOString();
+    const userId = req.authUser!.id;
     let conversationId = parsed.data.conversationId;
+    let storedContext: { context_opportunity_id: string | null; context_report_id: string | null } | undefined;
+    if (conversationId) {
+      storedContext = db.prepare(`
+        SELECT context_opportunity_id, context_report_id FROM conversations WHERE id = ? AND user_id = ?
+      `).get(conversationId, userId) as typeof storedContext;
+      if (!storedContext) {
+        res.status(404).json({ error: 'Conversation not found.' });
+        return;
+      }
+    }
 
+    const contextOpportunityId = parsed.data.contextOpportunityId || storedContext?.context_opportunity_id || null;
+    const contextReportId = parsed.data.contextReportId || storedContext?.context_report_id || null;
+    if (contextOpportunityId) {
+      const opportunity = db.prepare('SELECT id FROM opportunities WHERE id = ? AND is_published = 1')
+        .get(contextOpportunityId);
+      if (!opportunity) {
+        res.status(404).json({ error: 'Published opportunity not found.' });
+        return;
+      }
+    }
+    if (contextReportId) {
+      const report = db.prepare('SELECT id FROM verification_reports WHERE id = ? AND user_id = ?')
+        .get(contextReportId, userId);
+      if (!report) {
+        res.status(404).json({ error: 'Verification report not found.' });
+        return;
+      }
+    }
+
+    const now = new Date().toISOString();
     if (!conversationId) {
       conversationId = `conv_${crypto.randomUUID()}`;
       db.prepare(`
@@ -1613,22 +1722,14 @@ export function createApp(db: Database.Database) {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         conversationId,
-        req.authUser!.id,
+        userId,
         sanitizeText(parsed.data.message, 60),
         parsed.data.language,
-        parsed.data.contextOpportunityId || null,
-        parsed.data.contextReportId || null,
+        contextOpportunityId,
+        contextReportId,
         now,
         now
       );
-    } else {
-      const owned = db
-        .prepare('SELECT id FROM conversations WHERE id = ? AND user_id = ?')
-        .get(conversationId, req.authUser!.id);
-      if (!owned) {
-        res.status(404).json({ error: 'Conversation not found.' });
-        return;
-      }
     }
 
     const userMsgId = `msg_${crypto.randomUUID()}`;
@@ -1639,47 +1740,46 @@ export function createApp(db: Database.Database) {
     `).run(userMsgId, conversationId, cleanMsg, now);
 
     try {
-      const profile = getStudentProfile(req.authUser!.id);
-      const { reply, groundingRefs } = await runAssistantChat(db, {
-        userId: req.authUser!.id,
+      const settings = db.prepare('SELECT external_ai_consent, consent_version FROM ai_user_settings WHERE user_id = ?')
+        .get(userId) as { external_ai_consent: number; consent_version: string | null } | undefined;
+      const externalAiConsent = settings?.external_ai_consent === 1 && settings.consent_version === AI_CONSENT_VERSION;
+      const profile = getStudentProfile(userId);
+      const result = await runAssistantChat(db, {
+        userId,
         conversationId,
         userMessage: cleanMsg,
         language: parsed.data.language,
         profile,
-        contextOpportunityId: parsed.data.contextOpportunityId,
-        contextReportId: parsed.data.contextReportId,
+        externalAiConsent,
+        contextOpportunityId,
+        contextReportId,
       });
 
       const assistantMsgId = `msg_${crypto.randomUUID()}`;
       const replyTime = new Date().toISOString();
       db.prepare(`
-        INSERT INTO messages (id, conversation_id, role, content, grounding_refs_json, created_at)
-        VALUES (?, ?, 'assistant', ?, ?, ?)
-      `).run(assistantMsgId, conversationId, reply, JSON.stringify(groundingRefs), replyTime);
-
-      db.prepare('UPDATE conversations SET updated_at = ?, language = ? WHERE id = ?').run(
-        replyTime,
-        parsed.data.language,
-        conversationId
-      );
+        INSERT INTO messages (id, conversation_id, role, content, grounding_refs_json, response_mode, created_at)
+        VALUES (?, ?, 'assistant', ?, ?, ?, ?)
+      `).run(assistantMsgId, conversationId, result.reply, JSON.stringify(result.groundingRefs), result.responseMode, replyTime);
+      db.prepare('UPDATE conversations SET updated_at = ?, language = ? WHERE id = ? AND user_id = ?')
+        .run(replyTime, parsed.data.language, conversationId, userId);
 
       res.json({
         conversationId,
-        userMessage: { id: userMsgId, role: 'user', content: cleanMsg, groundingRefs: [], createdAt: now },
+        fallbackReason: result.fallbackReason,
+        usage: result.usage,
+        userMessage: { id: userMsgId, role: 'user', content: cleanMsg, groundingRefs: [], responseMode: 'guided', createdAt: now },
         assistantMessage: {
           id: assistantMsgId,
           role: 'assistant',
-          content: reply,
-          groundingRefs,
+          content: result.reply,
+          groundingRefs: result.groundingRefs,
+          responseMode: result.responseMode,
           createdAt: replyTime,
         },
       });
-    } catch (err) {
-      if (err instanceof AiServiceError) {
-        res.status(err.statusCode).json({ error: err.message });
-        return;
-      }
-      res.status(500).json({ error: 'Assistant failed to respond.' });
+    } catch {
+      res.status(500).json({ error: 'Assistant could not save this response. Please try again.' });
     }
   });
 
@@ -2412,7 +2512,12 @@ export function createApp(db: Database.Database) {
 
   app.get('/api/admin/ai-usage', requireRole('admin', 'moderator'), (_req, res) => {
     const rows = db
-      .prepare('SELECT * FROM ai_usage_logs ORDER BY created_at DESC LIMIT 100')
+      .prepare(`
+        SELECT id, user_id, feature, model, status, latency_ms, tokens_estimated,
+               CASE WHEN error_message IS NULL THEN NULL ELSE 'provider_error' END AS error_message,
+               created_at
+        FROM ai_usage_logs ORDER BY created_at DESC LIMIT 100
+      `)
       .all();
     res.json({ items: rows });
   });

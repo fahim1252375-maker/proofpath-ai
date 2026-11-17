@@ -207,5 +207,6 @@ export interface AssistantMessage {
   role: 'user' | 'assistant';
   content: string;
   groundingRefs: Array<{ title: string; url: string }>;
+  responseMode?: 'guided' | 'gemini';
   createdAt: string;
 }

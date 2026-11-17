@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Bot, CalendarDays, ClipboardCheck, ExternalLink, FileText, Loader2, MessagesSquare, Plus, Send, Trash2 } from 'lucide-react';
+import { Bot, CalendarDays, Check, ClipboardCheck, Copy, ExternalLink, FileText, Loader2, MessagesSquare, Plus, Send, Trash2 } from 'lucide-react';
 import { getAdvisorWorkflows, type AdvisorWorkflow } from '../lib/advisorWorkflows';
 import { apiRequest } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
@@ -22,6 +22,18 @@ export function AssistantPage({
   const [sending, setSending] = useState(false);
   const [loadingConvs, setLoadingConvs] = useState(true);
   const [loadingMsgs, setLoadingMsgs] = useState(false);
+  const [aiStatus, setAiStatus] = useState<{
+    availability: string;
+    aiReady: boolean;
+    consent: boolean;
+    usedToday: number;
+    dailyLimit: number;
+    remainingToday: number;
+    resetAt: string;
+  } | null>(null);
+  const [retryPrompt, setRetryPrompt] = useState('');
+  const [sendError, setSendError] = useState('');
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
 
   const loadConversations = async () => {
     setLoadingConvs(true);
@@ -39,6 +51,9 @@ export function AssistantPage({
 
   useEffect(() => {
     loadConversations();
+    apiRequest<typeof aiStatus>('/api/assistant/status')
+      .then(setAiStatus)
+      .catch(() => setAiStatus(null));
   }, []);
 
   useEffect(() => {
@@ -64,6 +79,8 @@ export function AssistantPage({
         conversationId: string;
         userMessage: AssistantMessage;
         assistantMessage: AssistantMessage;
+        fallbackReason: string | null;
+        usage: { usedToday: number; dailyLimit: number; resetAt: string };
       }>('/api/assistant/chat', {
         method: 'POST',
         body: JSON.stringify({
@@ -80,14 +97,37 @@ export function AssistantPage({
         await loadConversations();
       }
       setMessages((prev) => [...prev, res.userMessage, res.assistantMessage]);
+      setAiStatus((current) => current ? {
+        ...current,
+        usedToday: res.usage.usedToday,
+        dailyLimit: res.usage.dailyLimit,
+        remainingToday: Math.max(0, res.usage.dailyLimit - res.usage.usedToday),
+        resetAt: res.usage.resetAt,
+      } : current);
+      setRetryPrompt('');
+      setSendError('');
+    } catch (err) {
+      setRetryPrompt(text);
+      setSendError(err instanceof Error ? err.message : 'Unable to reach ProofPath Advisor.');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleConsentChange = async (enabled: boolean) => {
+    try {
+      await apiRequest('/api/assistant/consent', {
+        method: 'PUT',
+        body: JSON.stringify({ enabled }),
+      });
+      const next = await apiRequest<typeof aiStatus>('/api/assistant/status');
+      setAiStatus(next);
     } catch (err) {
       addToast({
         type: 'error',
-        title: 'AI Assistant Error',
-        description: err instanceof Error ? err.message : 'Unable to reach AI advisor',
+        title: 'Privacy setting not saved',
+        description: err instanceof Error ? err.message : 'Please try again.',
       });
-    } finally {
-      setSending(false);
     }
   };
 
@@ -105,17 +145,35 @@ export function AssistantPage({
     loadConversations();
   };
 
+  const handleClearHistory = async () => {
+    if (!window.confirm('Clear all of your saved advisor conversations? This cannot be undone.')) return;
+    await apiRequest('/api/assistant/conversations', { method: 'DELETE' });
+    setActiveConvId(null);
+    setMessages([]);
+    await loadConversations();
+  };
+
+  const handleCopy = async (message: AssistantMessage) => {
+    try {
+      await navigator.clipboard.writeText(message.content);
+      setCopiedMessageId(message.id);
+      window.setTimeout(() => setCopiedMessageId(null), 1500);
+    } catch {
+      addToast({ type: 'error', title: 'Copy unavailable', description: 'Your browser did not allow clipboard access.' });
+    }
+  };
+
   const suggestedQuestions =
     language === 'bn'
       ? [
           'আমার প্রোফাইল অনুযায়ী কোন স্কলারশিপগুলো সবচেয়ে উপযুক্ত?',
           'ভুয়া স্কলারশিপ বা ইন্টার্নশিপ প্রতারণা চেনার উপায় কী?',
-          'Chevening বনাম Erasmus Mundus এর যোগ্যতা তুলনা করুন।',
+          'আমার প্রোফাইলের সঙ্গে কোন প্রকাশিত সুযোগের রেকর্ড মেলে?',
         ]
       : [
-          'Which verified scholarships match my current eligibility profile?',
+          'Which published opportunity records match my profile?',
           'What red flags indicate a scholarship or internship scam?',
-          'Compare Chevening and Erasmus Mundus eligibility requirements for me.',
+          'Compare eligibility requirements in my saved opportunity records.',
           'What documents should I prepare 3 months before deadlines?',
         ];
 
@@ -132,13 +190,13 @@ export function AssistantPage({
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
         <div>
           <p className="font-mono text-[11px] font-semibold tracking-wider text-[#5E6B5B] uppercase dark:text-[#C5F36A]">
-            Bilingual Grounded Advisor
+            Bilingual student advisor
           </p>
           <h1 className="mt-0.5 font-display text-2xl font-bold text-[#101713] dark:text-[#F7F7F0]">
-            AI Opportunity Advisor
+            ProofPath Student Copilot
           </h1>
           <p className="text-xs text-[#5E6B5B] dark:text-[#8C9A88]">
-            Grounded in your Student Profile, Verified Directory records, and saved Verification Reports.
+            Practical writing, eligibility, and application guidance with local profile checks and source links.
           </p>
         </div>
 
@@ -178,6 +236,41 @@ export function AssistantPage({
         </div>
       </div>
 
+      <section aria-label="AI privacy and availability" className="rounded-xl border border-[#DCE5D3] bg-white p-4 dark:border-[#2C3730] dark:bg-[#141B17]">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-[#101713] dark:text-[#F7F7F0]">
+              {aiStatus?.aiReady && aiStatus.availability === 'ready' ? 'Gemini Free is available' : 'ProofPath Guided Mode is available'}
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-[#5E6B5B] dark:text-[#A9B5A6]">
+              {aiStatus?.availability === 'ready'
+                ? `${aiStatus.remainingToday} of ${aiStatus.dailyLimit} daily Gemini responses remain. The counter resets at ${new Date(aiStatus.resetAt).toLocaleString()}.`
+                : 'Gemini stays off unless the server confirms its free tier, has a configured project cap, and you opt in. Guided replies use your ProofPath data locally.'}
+            </p>
+          </div>
+          <span className="shrink-0 rounded-full bg-[#F0F4E9] px-3 py-1 text-xs font-semibold text-[#40552F] dark:bg-[#1D2A1E] dark:text-[#C5F36A]">
+            {aiStatus?.aiReady && aiStatus.availability === 'ready' ? 'Free tier · capped' : 'No-cost guided mode'}
+          </span>
+        </div>
+        <details className="mt-3 rounded-lg bg-[#F7F7F0] p-3 text-xs leading-relaxed text-[#455044] dark:bg-[#0C110E] dark:text-[#A9B5A6]">
+          <summary className="cursor-pointer font-semibold text-[#101713] dark:text-[#F7F7F0]">What is sent to Google?</summary>
+          <p className="mt-2">
+            Only your current message is sent to Google Gemini after obvious email addresses, phone numbers, and labeled identity numbers are removed. Redaction can miss details, so do not include sensitive or confidential information. Your profile, previous chats, verification reports, and uploaded files are never included. Google’s Free-tier terms may allow prompts and responses to be used to improve its products; see the{' '}
+            <a href="https://ai.google.dev/gemini-api/terms" target="_blank" rel="noopener noreferrer" className="font-semibold underline">Gemini API terms</a>.
+          </p>
+          <p className="mt-2">You can turn external processing off at any time. Guided Mode remains available.</p>
+        </details>
+        <label className="mt-3 flex items-start gap-2 text-xs leading-relaxed text-[#243329] dark:text-[#D5DDD2]">
+          <input
+            type="checkbox"
+            className="mt-0.5 accent-[#668A38]"
+            checked={Boolean(aiStatus?.consent)}
+            onChange={(event) => handleConsentChange(event.target.checked)}
+          />
+          <span>Allow my current message, with obvious personal identifiers redacted, to be processed by Google Gemini Free when the site’s free-tier quota is available.</span>
+        </label>
+      </section>
+
       {(initialOpportunityId || initialReportId) && (
         <div className="rounded-lg border border-[#9ECF42] bg-[#C5F36A]/20 px-3 py-2 text-xs font-medium text-[#101713] dark:border-[#C5F36A]/40 dark:bg-[#C5F36A]/10 dark:text-[#C5F36A]">
           Context attached: {initialOpportunityId ? `Opportunity ${initialOpportunityId}` : `Verification Report ${initialReportId}`}
@@ -187,9 +280,10 @@ export function AssistantPage({
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
         {/* Conversation History */}
         <aside className="rounded-xl border border-[#E4E8E0] bg-white p-3 lg:col-span-3 dark:border-[#232D27] dark:bg-[#141B17]">
-          <p className="px-2 pb-2 font-mono text-[11px] font-semibold text-[#5E6B5B] uppercase dark:text-[#8C9A88]">
-            Conversations
-          </p>
+          <div className="flex items-center justify-between gap-2 px-2 pb-2">
+            <p className="font-mono text-[11px] font-semibold text-[#5E6B5B] uppercase dark:text-[#8C9A88]">Conversations</p>
+            {conversations.length > 0 && <button type="button" onClick={handleClearHistory} className="text-[10px] font-semibold text-[#71806E] underline hover:text-red-600">Clear all</button>}
+          </div>
           {loadingConvs ? (
             <SkeletonBlock className="h-24" />
           ) : conversations.length === 0 ? (
@@ -322,10 +416,19 @@ export function AssistantPage({
                         : 'border border-[#E4E8E0] bg-[#F7F7F0] text-[#101713] dark:border-[#232D27] dark:bg-[#0C110E] dark:text-[#F7F7F0]'
                     }`}
                   >
+                    {m.role === 'assistant' && (
+                      <div className="mb-2 flex items-center justify-between gap-4 text-[10px] font-semibold uppercase tracking-wider text-[#5E6B5B] dark:text-[#A9B5A6]">
+                        <span>{m.responseMode === 'gemini' ? 'Gemini Free + local checks' : 'ProofPath guided'}</span>
+                        <button type="button" onClick={() => handleCopy(m)} className="inline-flex items-center gap-1 rounded px-1 py-0.5 normal-case tracking-normal hover:bg-white/60 dark:hover:bg-[#1D2520]" aria-label="Copy assistant response">
+                          {copiedMessageId === m.id ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                          {copiedMessageId === m.id ? 'Copied' : 'Copy'}
+                        </button>
+                      </div>
+                    )}
                     <p className="whitespace-pre-wrap">{m.content}</p>
                     {m.groundingRefs && m.groundingRefs.length > 0 && (
                       <div className="mt-3 border-t border-[#E4E8E0] pt-2 text-xs dark:border-[#232D27]">
-                        <p className="font-semibold text-[#5E6B5B]">Sources cited:</p>
+                        <p className="font-semibold text-[#5E6B5B]">Links from your saved ProofPath records:</p>
                         <ul className="mt-1 space-y-1">
                           {m.groundingRefs.map((ref, idx) => (
                             <li key={idx}>
@@ -349,6 +452,13 @@ export function AssistantPage({
             )}
           </div>
 
+          {sendError && (
+            <div role="alert" className="mx-3 mb-2 flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+              <span>{sendError}</span>
+              {retryPrompt && <button type="button" onClick={() => handleSend(retryPrompt)} disabled={sending} className="shrink-0 font-semibold underline">Retry</button>}
+            </div>
+          )}
+
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -360,6 +470,8 @@ export function AssistantPage({
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
+              maxLength={2000}
+              aria-label="Message the ProofPath Student Copilot"
               placeholder={
                 language === 'bn'
                   ? 'বাংলায় বা ইংরেজিতে আপনার প্রশ্ন লিখুন...'

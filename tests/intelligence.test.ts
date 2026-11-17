@@ -3,6 +3,7 @@ import type http from 'node:http';
 import { initDatabase } from '../server/db.ts';
 import { createApp } from '../server/app.ts';
 import { scoreSourceCredibility } from '../server/source-credibility.ts';
+import { insertTestOpportunities } from './helpers/test-opportunities.ts';
 import type Database from 'better-sqlite3';
 
 let server: http.Server;
@@ -14,6 +15,7 @@ beforeAll(async () => {
   process.env.NODE_ENV = 'test';
   process.env.MONITORING_CRON_SECRET = '';
   db = initDatabase(':memory:');
+  insertTestOpportunities(db);
   const app = createApp(db);
   await new Promise<void>((resolve) => {
     server = app.listen(0, '127.0.0.1', () => {
@@ -53,7 +55,7 @@ describe('ProofPath AI Trust Intelligence', () => {
   });
 
   it('exposes public opportunity intelligence and creates migration 2 tables', async () => {
-    const response = await fetch(baseUrl + '/api/opportunities/opp_imagine_cup/intelligence');
+    const response = await fetch(baseUrl + '/api/opportunities/opp_test_one/intelligence');
     expect(response.status).toBe(200);
     const result = await response.json() as {
       sourceAssessment: { score: number; caveat: string };
@@ -79,7 +81,7 @@ describe('ProofPath AI Trust Intelligence', () => {
     const endpoints = [
       '/api/watchlist',
       '/api/trust/summary',
-      '/api/eligibility/explain/opp_imagine_cup',
+      '/api/eligibility/explain/opp_test_one',
     ];
     for (const endpoint of endpoints) {
       const response = await fetch(baseUrl + endpoint);
