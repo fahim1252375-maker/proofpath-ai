@@ -16,6 +16,12 @@ import {
 } from 'lucide-react';
 import { apiRequest } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
+import {
+  canTransition,
+  focusActions,
+  isOverdue,
+  transitionBlockReason,
+} from '../lib/applicationWorkflow';
 import type { ApplicationItem } from '../types';
 import { ConfirmDialog, EmptyState, SkeletonBlock } from '../components/ui/Common';
 
@@ -41,14 +47,14 @@ function computeReadiness(app: ApplicationItem) {
   return { totalChecklist, doneChecklist, totalDocs, readyDocs, percent, missingDocs, pendingSteps };
 }
 
-function daysUntilDeadline(deadline: string): number | null {
-  const match = /^(\\d{4})-(\\d{2})-(\\d{2})/.exec(deadline || '');
+export function daysUntilDeadline(deadline: string, today: Date = new Date()): number | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(deadline || '');
   if (!match) return null;
   const [, year, month, day] = match.map(Number) as unknown as [number, number, number, number];
   const due = new Date(year, month - 1, day);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return Math.round((due.getTime() - today.getTime()) / 86_400_000);
+  const startOfToday = new Date(today);
+  startOfToday.setHours(0, 0, 0, 0);
+  return Math.round((due.getTime() - startOfToday.getTime()) / 86_400_000);
 }
 
 export function ApplicationsPage() {
@@ -56,6 +62,7 @@ export function ApplicationsPage() {
   const [items, setItems] = useState<ApplicationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'kanban' | 'list' | 'calendar'>('kanban');
+  const [focusMode, setFocusMode] = useState(false);
   const [quickFilter, setQuickFilter] = useState<'all' | 'needs_action' | 'due_soon'>('all');
   const [selected, setSelected] = useState<ApplicationItem | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -200,6 +207,17 @@ export function ApplicationsPage() {
       : 0;
 
   const activeApplications = items.filter((app) => app.status !== 'accepted' && app.status !== 'rejected');
+  const focus = focusMode
+    ? focusActions(
+        items.map((app) => ({
+          id: app.id,
+          title: app.customTitle,
+          status: app.status,
+          deadline: app.deadline,
+          checklist: app.checklist,
+        }))
+      )
+    : [];
   const needsActionItems = activeApplications.filter((app) => {
     const readiness = computeReadiness(app);
     return readiness.pendingSteps > 0 || readiness.missingDocs > 0;
@@ -264,6 +282,20 @@ export function ApplicationsPage() {
               </button>
             ))}
           </div>
+
+          <button
+            type="button"
+            onClick={() => setFocusMode((mode) => !mode)}
+            aria-pressed={focusMode}
+            className={`inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold ${
+              focusMode
+                ? 'bg-[#C5F36A] text-[#101713] hover:bg-[#b5e458]'
+                : 'border border-[#E4E8E0] text-[#101713] hover:bg-[#F7F7F0] dark:border-[#2C3730] dark:text-[#F7F7F0] dark:hover:bg-[#1D2520]'
+            }`}
+          >
+            <ListChecks className="h-4 w-4" aria-hidden="true" />
+            <span>{focusMode ? 'Exit Focus Mode' : 'Focus Mode'}</span>
+          </button>
 
           <button
             type="button"
@@ -351,6 +383,68 @@ export function ApplicationsPage() {
 
       {loading ? (
         <SkeletonBlock className="h-80 rounded-xl" />
+      ) : focusMode ? (
+        <section aria-label="Focus Mode — next actions" className="rounded-xl border border-[#E4E8E0] bg-white p-5 dark:border-[#232D27] dark:bg-[#141B17]">
+          <h2 className="font-display text-base font-bold text-[#101713] dark:text-[#F7F7F0]">
+            Focus Mode — your next three actions
+          </h2>
+          {focus.length === 0 ? (
+            <p className="mt-2 text-xs text-[#5E6B5B] dark:text-[#8C9A88]">
+              No open actions right now. Track an application or add checklist steps to see actions here.
+            </p>
+          ) : (
+            <>
+              {focus.some((a) => a.kind === 'deadline') && (
+                <div className="mt-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-[#5E6B5B] dark:text-[#8C9A88]">
+                    Deadline actions
+                  </p>
+                  <ul className="mt-1.5 space-y-1.5">
+                    {focus.filter((a) => a.kind === 'deadline').map((action) => (
+                      <li key={`deadline-${action.applicationId}`}>
+                        <button
+                          type="button"
+                          onClick={() => setSelected(items.find((i) => i.id === action.applicationId) || null)}
+                          className="flex w-full items-center justify-between gap-3 rounded-lg border border-[#E4E8E0] bg-[#F7F7F0] px-3 py-2 text-left text-xs hover:border-[#101713] dark:border-[#232D27] dark:bg-[#0C110E] dark:hover:border-[#C5F36A]"
+                        >
+                          <span>
+                            <span className="font-semibold text-[#101713] dark:text-[#F7F7F0]">{action.applicationTitle}</span>
+                            <span className="ml-2 text-[#5E6B5B] dark:text-[#8C9A88]">{action.label}</span>
+                          </span>
+                          <span className="font-mono text-[11px] text-[#5E6B5B] tabular-nums dark:text-[#8C9A88]">{action.detail}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {focus.some((a) => a.kind === 'checklist') && (
+                <div className="mt-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-[#5E6B5B] dark:text-[#8C9A88]">
+                    Checklist steps
+                  </p>
+                  <ul className="mt-1.5 space-y-1.5">
+                    {focus.filter((a) => a.kind === 'checklist').map((action) => (
+                      <li key={`checklist-${action.applicationId}-${action.label}`}>
+                        <button
+                          type="button"
+                          onClick={() => setSelected(items.find((i) => i.id === action.applicationId) || null)}
+                          className="flex w-full items-center justify-between gap-3 rounded-lg border border-[#E4E8E0] bg-[#F7F7F0] px-3 py-2 text-left text-xs hover:border-[#101713] dark:border-[#232D27] dark:bg-[#0C110E] dark:hover:border-[#C5F36A]"
+                        >
+                          <span>
+                            <span className="font-semibold text-[#101713] dark:text-[#F7F7F0]">{action.applicationTitle}</span>
+                            <span className="ml-2 text-[#5E6B5B] dark:text-[#8C9A88]">{action.label}</span>
+                          </span>
+                          <span className="font-mono text-[11px] text-[#5E6B5B] tabular-nums dark:text-[#8C9A88]">{action.detail}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </>
+          )}
+        </section>
       ) : items.length === 0 ? (
         <EmptyState
           icon={<Kanban className="h-5 w-5" />}
@@ -394,6 +488,7 @@ export function ApplicationsPage() {
                 <div className="space-y-2.5">
                   {stageApps.map((app) => {
                     const r = computeReadiness(app);
+                    const overdue = isOverdue(app.deadline, app.status);
                     return (
                       <div
                         key={app.id}
@@ -409,6 +504,11 @@ export function ApplicationsPage() {
                         <p className="mt-1 truncate text-[11px] text-[#5E6B5B] dark:text-[#8C9A88]">
                           {app.organization}
                         </p>
+                        {overdue && (
+                          <p className="mt-1 text-[10px] font-bold text-red-700 dark:text-red-400" role="status">
+                            Overdue — deadline has passed
+                          </p>
+                        )}
                         <div className="mt-2.5 flex items-center justify-between font-mono text-[11px] text-[#5E6B5B] tabular-nums dark:text-[#8C9A88]">
                           <span>{app.deadline}</span>
                           <span>{r.percent}% ready</span>
@@ -428,11 +528,26 @@ export function ApplicationsPage() {
                           className="mt-2 h-7 w-full rounded border border-[#E4E8E0] bg-[#F7F7F0] px-1.5 text-[11px] dark:border-[#232D27] dark:bg-[#141B17]"
                         >
                           {STAGES.map((s) => (
-                            <option key={s.id} value={s.id}>
+                            <option
+                              key={s.id}
+                              value={s.id}
+                              disabled={!canTransition(app.status, s.id)}
+                              title={transitionBlockReason(app.status, s.id) ?? undefined}
+                            >
                               {s.label}
                             </option>
                           ))}
                         </select>
+                        {(() => {
+                          const blockedStage = STAGES.find(
+                            (s) => s.id !== app.status && !canTransition(app.status, s.id)
+                          );
+                          if (!blockedStage) return null;
+                          const reason = transitionBlockReason(app.status, blockedStage.id);
+                          return reason ? (
+                            <p className="mt-1 text-[10px] text-[#71806E] dark:text-[#8C9A88]">{reason}</p>
+                          ) : null;
+                        })()}
                       </div>
                     );
                   })}
@@ -458,6 +573,7 @@ export function ApplicationsPage() {
             <tbody className="divide-y divide-[#E4E8E0] dark:divide-[#232D27]">
               {visibleItems.map((app) => {
                 const r = computeReadiness(app);
+                const overdue = isOverdue(app.deadline, app.status);
                 return (
                   <tr key={app.id} className="hover:bg-[#F7F7F0] dark:hover:bg-[#1D2520]">
                     <td className="px-4 py-3">
@@ -470,7 +586,14 @@ export function ApplicationsPage() {
                       </button>
                       <p className="text-[#5E6B5B] dark:text-[#8C9A88]">{app.organization}</p>
                     </td>
-                    <td className="px-4 py-3 capitalize">{app.status}</td>
+                    <td className="px-4 py-3 capitalize">
+                      {app.status}
+                      {overdue && (
+                        <span className="ml-1.5 whitespace-nowrap rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-bold text-red-700 dark:bg-red-950/60 dark:text-red-300">
+                          Overdue
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 capitalize">{app.priority}</td>
                     <td className="px-4 py-3 font-mono tabular-nums">{r.percent}%</td>
                     <td className="px-4 py-3 font-mono tabular-nums">
@@ -480,7 +603,10 @@ export function ApplicationsPage() {
                         <span className="text-emerald-700 dark:text-[#C5F36A]">All ready</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 font-mono tabular-nums">{app.deadline}</td>
+                    <td className="px-4 py-3 font-mono tabular-nums">
+                      {app.deadline}
+                      {overdue && <span className="ml-1 text-red-700 dark:text-red-400">(passed)</span>}
+                    </td>
                     <td className="px-4 py-3 text-right">
                       <button
                         type="button"
@@ -703,6 +829,9 @@ export function ApplicationsPage() {
                 </h2>
                 <p className="text-xs text-[#5E6B5B] dark:text-[#8C9A88]">
                   {selected.organization} · Deadline <span className="font-mono">{selected.deadline}</span>
+                  {isOverdue(selected.deadline, selected.status) && (
+                    <span className="ml-1.5 font-bold text-red-700 dark:text-red-400">· Overdue</span>
+                  )}
                 </p>
               </div>
               <button type="button" onClick={() => setSelected(null)} aria-label="Close details">
@@ -734,14 +863,35 @@ export function ApplicationsPage() {
                     onChange={(e) =>
                       handleUpdate(selected.id, { status: e.target.value as ApplicationItem['status'] })
                     }
+                    aria-describedby={
+                      STAGES.some((s) => s.id !== selected.status && !canTransition(selected.status, s.id))
+                        ? 'stage-transition-reason'
+                        : undefined
+                    }
                     className="mt-1 h-9 w-full rounded-lg border border-[#E4E8E0] bg-[#F7F7F0] px-2.5 text-sm dark:border-[#232D27] dark:bg-[#0C110E]"
                   >
                     {STAGES.map((s) => (
-                      <option key={s.id} value={s.id}>
+                      <option
+                        key={s.id}
+                        value={s.id}
+                        disabled={!canTransition(selected.status, s.id)}
+                        title={transitionBlockReason(selected.status, s.id) ?? undefined}
+                      >
                         {s.label}
                       </option>
                     ))}
                   </select>
+                  {(() => {
+                    const blockedStage = STAGES.find(
+                      (s) => s.id !== selected.status && !canTransition(selected.status, s.id)
+                    );
+                    const reason = blockedStage ? transitionBlockReason(selected.status, blockedStage.id) : null;
+                    return reason ? (
+                      <p id="stage-transition-reason" className="mt-1 text-[10px] text-[#71806E] dark:text-[#8C9A88]">
+                        {reason}
+                      </p>
+                    ) : null;
+                  })()}
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-[#5E6B5B]">Deadline</label>
