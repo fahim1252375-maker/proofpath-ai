@@ -27,7 +27,10 @@ jobs:
           node-version: 24
 
       - name: Install MCP package dependencies
-        run: npm install --no-package-lock --ignore-scripts
+        run: npm install --ignore-scripts
+
+      - name: Audit MCP dependencies
+        run: npm audit --audit-level=high
 
       - name: Test MCP protocol and tools
         run: npm test
