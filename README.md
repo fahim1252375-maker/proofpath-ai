@@ -68,6 +68,42 @@ npm run build    # Builds Vite production bundle to dist/
 npm start        # Serves production API + static dist/ via tsx server.ts
 ```
 
+
+## Model Context Protocol (MCP) integration
+
+ProofPath AI includes a standalone, read-only MCP server in `mcp-server/`. It exposes five tools over the MCP **stdio** transport and consumes only the application's existing public HTTP GET routes. It does not create a second database connection, bypass the Express API, access student profiles, expose verification-report contents, or perform writes.
+
+### MCP server inventory
+
+| MCP tool | Existing ProofPath API route | Purpose |
+|---|---|---|
+| `search_opportunities` | `GET /api/opportunities` | Search and filter published opportunities |
+| `get_opportunity_details` | `GET /api/opportunities/:id` | Read a public opportunity and trust summary |
+| `compare_opportunities` | `GET /api/opportunities/compare` | Compare up to four published opportunities |
+| `get_public_platform_stats` | `GET /api/public/stats` | Read aggregate public platform counts |
+| `check_api_health` | `GET /api/health` | Check API/database health without returning configuration secrets |
+
+The opportunity-detail tool deliberately returns an allowlisted public projection and a verification-history count; it does not expose raw verification reports, claims, uploaded-file metadata, or user identifiers. All five tools are read-only.
+
+### Run locally
+
+Node.js 22 or later is required.
+
+```bash
+cd mcp-server
+npm install
+npm test
+npm start
+```
+
+By default, the server targets the public demo at `https://proofpath-ai-demo.onrender.com`. To use a local ProofPath instance, set `PROOFPATH_API_BASE_URL=http://127.0.0.1:3000` before starting it.
+
+The repository-root `.mcp.json` contains a project-level stdio server entry for compatible MCP hosts. Install the standalone package dependencies first, then open the repository in an MCP-compatible client.
+
+### Protocol verification and scope
+
+The automated integration test starts a real MCP stdio server process and connects to it with the official MCP TypeScript SDK client. It checks initialization, tool discovery, tool execution, GET-only API access, and redaction of private verification-history content. The server currently supports **stdio only**; Streamable HTTP, legacy SSE, and WebSocket transports are not claimed. The server is currently specific to ProofPath AI and has not yet been reused by another project.
+
 ## Security Controls
 
 - **Authentication**: `crypto.scryptSync` salted password hashing + `crypto.timingSafeEqual` verification, HTTP-only `SameSite=Lax` cookies, and per-session `X-CSRF-Token` validation on state-changing requests. Demo evaluation accounts are disabled in production (`NODE_ENV === 'production'`).
