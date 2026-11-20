@@ -173,7 +173,7 @@ export function createProofPathMcpServer({
         fundingType: fundingTypeSchema.optional(),
         status: verificationStatusSchema.optional(),
         maxGpa: z.number().min(0).max(100).optional(),
-        deadlineBefore: z.string().regex(/^\\d{4}-\\d{2}-\\d{2}$/).optional(),
+        deadlineBefore: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
         sort: z.enum(["deadline_asc", "deadline_desc", "verified_recent", "title_asc"]).optional(),
         page: z.number().int().min(1).max(100).optional(),
         limit: z.number().int().min(1).max(25).optional()
