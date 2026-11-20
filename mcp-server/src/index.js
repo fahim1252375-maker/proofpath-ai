@@ -136,9 +136,36 @@ async function requestJson(apiBaseUrl, route, fetchImpl) {
     throw new Error("ProofPath API returned an unexpected content type.");
   }
 
-  const body = await response.text();
-  if (Buffer.byteLength(body, "utf8") > MAX_RESPONSE_BYTES) {
+  const declaredLength = Number(response.headers.get("content-length") || 0);
+  if (declaredLength > MAX_RESPONSE_BYTES) {
     throw new Error("ProofPath API response exceeded the MCP server response limit.");
+  }
+
+  let body;
+  if (response.body?.getReader) {
+    const reader = response.body.getReader();
+    const chunks = [];
+    let totalBytes = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        totalBytes += value.byteLength;
+        if (totalBytes > MAX_RESPONSE_BYTES) {
+          await reader.cancel().catch(() => {});
+          throw new Error("ProofPath API response exceeded the MCP server response limit.");
+        }
+        chunks.push(Buffer.from(value));
+      }
+      body = Buffer.concat(chunks).toString("utf8");
+    } finally {
+      reader.releaseLock();
+    }
+  } else {
+    body = await response.text();
+    if (Buffer.byteLength(body, "utf8") > MAX_RESPONSE_BYTES) {
+      throw new Error("ProofPath API response exceeded the MCP server response limit.");
+    }
   }
 
   try {
