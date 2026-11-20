@@ -1,0 +1,33 @@
+name: MCP Server CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, feat/proofpath-mcp-server]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  mcp-stdio:
+    name: MCP stdio integration tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mcp-server
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install MCP package dependencies
+        run: npm install --no-package-lock --ignore-scripts
+
+      - name: Test MCP protocol and tools
+        run: npm test

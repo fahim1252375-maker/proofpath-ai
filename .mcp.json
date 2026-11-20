@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "proofpath-ai": {
+      "command": "node",
+      "args": [
+        "./mcp-server/src/index.js"
+      ],
+      "env": {
+        "PROOFPATH_API_BASE_URL": "https://proofpath-ai-demo.onrender.com"
+      }
+    }
+  }
+}
