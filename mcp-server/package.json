@@ -8,7 +8,7 @@
   },
   "scripts": {
     "start": "node src/index.js",
-    "test": "node --test"
+    "test": "node --test scripts/stdio-check.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.2",
